@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Inode Usage Report: Top Directories by File Count per Account (v1.0.0) - from srvScripts.com
+# Inode Usage Report: Top Directories by File Count per Account (v1.1.0) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/inode-usage-report/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -9,18 +9,24 @@
 # thresholds. Works on cPanel, DirectAdmin and plain Linux servers.
 #
 # https://srvscripts.com/scripts/inode-usage-report/
-# Version: 1.0.0
+# Version: 1.1.0
 # License: MIT
 #
 # Read-only: uses `du --inodes` (GNU coreutils 8.22+) and never changes files.
 # Runs at low CPU and I/O priority (nice/ionice) unless --no-nice is given.
 #
+# If du fails or prints an error for an account (unreadable or vanished
+# directory, I/O error), that account is reported as INCOMPLETE with a lower
+# bound ("12345+") or as UNKNOWN when no total was produced - never as OK.
+#
 # Exit codes: 0 = all accounts below --warn, 1 = at least one WARN,
-#             2 = at least one CRIT, 3 = usage or environment error.
+#             2 = at least one CRIT, 3 = usage or environment error, or at
+#             least one account INCOMPLETE/UNKNOWN (3 takes precedence,
+#             because the report is not complete).
 
 set -euo pipefail
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 TOP=10
 DEPTH=2
 WARN=200000
@@ -36,6 +42,8 @@ usage() {
 Usage: inode-usage-report.sh [options]
 
 Counts inodes per account home and shows the directories holding the most files.
+If du reports an error for an account, its status is INCOMPLETE (count shown as
+a lower bound, e.g. 12345+) or UNKNOWN (no total), and the script exits 3.
 
 Options:
   --top N          Directories to list per account (default: 10)
@@ -137,20 +145,34 @@ status_of() {
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 declare -a SUMMARY=()
 worst=0
+incomplete=0
 
 for a in "${ACCOUNTS[@]}"; do
     IFS=$'\t' read -r name home <<< "$a"
     out="$TMP/$name.du"
-    # -x: stay on one filesystem; errors (vanished files) are ignored
-    "${RUN[@]+"${RUN[@]}"}" du --inodes -x --max-depth="$DEPTH" "$home" 2>/dev/null > "$out" || true
-    total="$(awk -v h="$home" -F'\t' '$2==h {print $1}' "$out")"
-    total="${total:-0}"
-    st="$(status_of "$total")"
-    case "$st" in CRIT) worst=2 ;; WARN) [[ $worst -lt 1 ]] && worst=1 ;; esac
+    # -x: stay on one filesystem; any du error (unreadable or vanished
+    # directory, I/O error) means the count is not complete
+    rc=0
+    "${RUN[@]+"${RUN[@]}"}" du --inodes -x --max-depth="$DEPTH" "$home" 2> "$TMP/$name.err" > "$out" || rc=$?
+    total="$(awk -v h="$home" -F'\t' '$2==h && $1 ~ /^[0-9]+$/ {print $1}' "$out" | tail -n1)"
+    if [[ -z "$total" ]]; then
+        total="?"; st="UNKNOWN"
+    elif [[ $rc -ne 0 || -s "$TMP/$name.err" ]]; then
+        total="$total+"; st="INCOMPLETE"
+    else
+        st="$(status_of "$total")"
+    fi
+    case "$st" in
+        CRIT) worst=2 ;; WARN) [[ $worst -lt 1 ]] && worst=1 ;;
+        UNKNOWN|INCOMPLETE)
+            incomplete=$((incomplete + 1))
+            msg="$(head -n1 "$TMP/$name.err" 2>/dev/null || true)"
+            echo "Warning: $name: $st (du exit $rc): ${msg:-no total line in du output}" >&2 ;;
+    esac
     SUMMARY+=("$total"$'\t'"$name"$'\t'"$home"$'\t'"$st")
 done
 
-pct() { awk -v a="$1" -v b="$2" 'BEGIN{ if (b>0) printf "%.1f", a*100/b; else print "0.0" }'; }
+pct() { awk -v a="$1" -v b="$2" 'BEGIN{ b += 0; if (b>0) printf "%.1f", a*100/b; else print "?" }'; }
 
 # align: tab-separated input -> padded columns (no dependency on column(1))
 align() {
@@ -167,11 +189,15 @@ if [[ $CSV -eq 1 ]]; then
         if [[ $SUMMARY_ONLY -eq 1 ]]; then
             printf '%s,%s,%s,%s,,,\n' "$name" "$home" "$total" "$st"; continue
         fi
+        # an account with no directory rows (empty, or UNKNOWN) still gets one row
+        awk -v h="$home" -F'\t' '$2!=h {f=1} END {exit !f}' "$TMP/$name.du" ||
+            printf '%s,%s,%s,%s,,,\n' "$name" "$home" "$total" "$st"
         awk -v h="$home" -F'\t' '$2!=h' "$TMP/$name.du" | sort -t$'\t' -k1,1nr | head -n "$TOP" |
         while IFS=$'\t' read -r n d; do
             printf '%s,%s,%s,%s,"%s",%s,%s\n' "$name" "$home" "$total" "$st" "${d//\"/\"\"}" "$n" "$(pct "$n" "$total")"
         done || true   # head closing the pipe early is expected
     done <<< "$sorted"
+    [[ $incomplete -eq 0 ]] || exit 3
     exit "$worst"
 fi
 
@@ -191,4 +217,10 @@ if [[ $SUMMARY_ONLY -eq 0 ]]; then
     done <<< "$sorted"
 fi
 
+if [[ $incomplete -gt 0 ]]; then
+    echo
+    echo "WARNING: $incomplete account(s) could not be fully measured (du reported errors)."
+    echo "INCOMPLETE counts (shown as N+) are lower bounds; UNKNOWN means no total. Exit code 3."
+    exit 3
+fi
 exit "$worst"

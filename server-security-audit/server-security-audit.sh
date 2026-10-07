@@ -1,23 +1,26 @@
 #!/usr/bin/env bash
-# Server Security Audit Script (v2.2.1) - from srvScripts.com
+# Server Security Audit Script (v2.3.0) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/server-security-audit/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # server-security-audit.sh — read-only security baseline check for Linux servers
 # https://srvscripts.com/scripts/server-security-audit/   License: MIT
-# Version: 2.2.1
+# Version: 2.3.0  (2.3.0: firewall PASS now needs a catch-all deny; shadowed or ban-only DROPs are WARN)
 #
 # Prints PASS / WARN / SKIP / INFO lines. Changes nothing. Run as root for full coverage:
 #   bash server-security-audit.sh                  # full report
 #   bash server-security-audit.sh --brief          # only WARN and SKIP lines (cron + mail)
 #   bash server-security-audit.sh --allow-skipped  # checks that cannot run do not set exit 1
 # A check whose data cannot be read is reported as SKIP, never as PASS. The firewall PASS means
-# the ordered INPUT rules reach a DROP/REJECT (an ACCEPT-everything rule before it is a WARN);
-# it does not prove that every port or service is covered. Brute-force checks are heuristics.
+# the INPUT path ends in a catch-all deny (DROP/REJECT policy, or an unconditional DROP/REJECT that
+# is reached). An ACCEPT-everything rule before it is a WARN; only specific DROPs (e.g. fail2ban
+# bans) with an ACCEPT policy is a WARN; a DROP that only follows a conditional ACCEPT is a WARN
+# (unverified), because overlapping matches are not analysed. A PASS does not prove that every
+# port or service is covered. Brute-force checks are heuristics.
 # Exit: 0 = all checks ran and passed, 1 = warnings or skipped checks, 2 = usage error.
 set -uo pipefail
 export LC_ALL=C
 PATH=$PATH:/usr/sbin:/sbin:/usr/local/sbin      # sshd, sysctl, iptables live here
-SCRIPT_VERSION=2.2.1
+SCRIPT_VERSION=2.3.0
 
 usage() {
   cat <<'EOF'
@@ -154,26 +157,37 @@ else
   else skip "authorized_keys count: needs root"; fi
 fi
 
-# Is a DROP/REJECT actually reachable on the INPUT path? Reads `iptables -S` (or ip6tables -S) and
-# evaluates rules in order: an unconditional ACCEPT ends the chain, so anything after it is
-# unreachable; conditional rules (ports, interfaces, conntrack state) are assumed to match some
-# traffic; jumps into user chains (CSF, ufw, firewalld, Docker) are followed; RETURN ends a user
-# chain; the DROP policy counts only if traffic can reach the end of INPUT.
-# Prints: yes (reachable DROP/REJECT), acceptall:<rule> (unconditional ACCEPT before any drop), no.
+# Does the INPUT path end in a catch-all deny? Reads `iptables -S` (or ip6tables -S) and evaluates
+# rules in order: an unconditional ACCEPT ends the chain, so anything after it is unreachable; jumps
+# into user chains (CSF, ufw, firewalld, fail2ban, Docker) are followed; RETURN ends a user chain.
+# Only a catch-all deny counts as filtering: the DROP/REJECT policy (if traffic reaches the end of
+# INPUT) or an unconditional DROP/REJECT reached without a conditional jump. Conditional DROPs
+# (fail2ban bans, single ports) only block what they match. Matches are NOT compared, so a DROP
+# after a conditional ACCEPT (or after a conditional jump into a chain that ACCEPTs) may never be
+# reached: that is unverified, never yes.
+# Prints: yes (catch-all deny), acceptall:<rule> (unconditional ACCEPT before any drop),
+# unverified:<rule> (<reason>) (a drop exists, but only after an ACCEPT),
+# partial:<detail> (only specific DROP/REJECT rules, then ACCEPT), no.
 ipt_input_filters() {
   awk '
-    function uncond(s) { gsub(/-m comment --comment ("[^"]*"|[^ ]+)/, "", s); gsub(/-c [0-9]+ [0-9]+/, "", s); gsub(/[[:space:]]+/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return (s ~ /^(-j|-g) [^ ]+$/) }
-    # walk(chain): 1 = reachable DROP/REJECT found, 2 = traffic stopped by an unconditional ACCEPT, 0 = fell through
-    function walk(c, depth,   i, t, r, u) {
+    function uncond(s) { gsub(/-m comment --comment ("[^"]*"|[^ ]+)/, "", s); gsub(/-c [0-9]+ [0-9]+/, "", s); sub(/(^| )-[jg] .*$/, "", s); gsub(/[[:space:]]+/, "", s); return (s == "") }
+    # walk(chain, depth, pc): 1 = catch-all DROP/REJECT reached; 2 = traffic stopped by an unconditional
+    # ACCEPT; 0 = fell through. pc = 1 if this chain was entered by a conditional jump.
+    # ca = first conditional ACCEPT on the path, sh = first DROP/REJECT after it (may be unreachable),
+    # np/pt = number and first of the specific (conditional) DROP/REJECT rules reached before any ACCEPT.
+    function walk(c, depth, pc,   i, t, r, u) {
       if (depth > 30 || (c in busy)) return 0
       busy[c]=1
       for (i=1; i<=n[c]; i++) {
         t=tgt[c,i]; u=unc[c,i]
-        if (t=="DROP" || t=="REJECT") { delete busy[c]; return 1 }
-        if (t=="ACCEPT") { if (u) { if (c=="INPUT") firstacc=i; delete busy[c]; return 2 } continue }
+        if (t=="DROP" || t=="REJECT") { if (u && !pc) { delete busy[c]; return 1 }
+                                        if (ca != "") { if (sh=="") sh=c " rule " i } else { np++; if (pt=="") pt=c " rule " i }
+                                        continue }
+        if (t=="ACCEPT") { if (u) { if (c=="INPUT") firstacc=i; delete busy[c]; return 2 } if (ca=="") ca=c " rule " i; continue }
         if (t=="RETURN") { if (u) { delete busy[c]; return 0 } continue }
-        if (t in known) { r=walk(t, depth+1); if (r==1) { delete busy[c]; return 1 }
-                          if (r==2 && u) { if (c=="INPUT" && !firstacc) firstacc=i; delete busy[c]; return 2 } }
+        if (t in known) { r=walk(t, depth+1, (pc || !u)); if (r==1) { delete busy[c]; return 1 }
+                          if (r==2 && u) { if (c=="INPUT" && !firstacc) firstacc=i; delete busy[c]; return 2 }
+                          if (r==2 && ca=="") ca=c " rule " i " (jump to " t ")" }
       }
       delete busy[c]; return 0
     }
@@ -182,31 +196,44 @@ ipt_input_filters() {
     $1=="-A" { c=$2; known[c]=1; k=++n[c]; t=""; for (i=3;i<NF;i++) if ($i=="-j" || $i=="-g") t=$(i+1)
                tgt[c,k]=t; line=$0; sub(/^-A [^ ]+ ?/, "", line); unc[c,k]=uncond(line) }
     END {
-      r=walk("INPUT", 0)
+      np=0; r=walk("INPUT", 0, 0)
       if (r==1) { print "yes"; exit }
+      if (r==0 && (pol["INPUT"]=="DROP" || pol["INPUT"]=="REJECT")) { print "yes"; exit }
+      if (sh != "") { print "unverified:" sh " (DROP/REJECT after a conditional ACCEPT at " ca ")"; exit }
+      if (np) { print "partial:" np " specific DROP/REJECT rule(s), first " pt "; then " (r==2 ? "ACCEPT-all at INPUT rule " firstacc : "INPUT policy " (pol["INPUT"]=="" ? "ACCEPT" : pol["INPUT"])); exit }
       if (r==2) { print "acceptall:INPUT rule " firstacc; exit }
-      if (pol["INPUT"]=="DROP" || pol["INPUT"]=="REJECT") { print "yes"; exit }
       print "no"
     }'
 }
 # Same question for `nft list ruleset`: every base chain with hook input is evaluated in order
 # (a drop in any of them is final, an accept only ends that chain). jump/goto targets in the same
-# table are followed. Prints yes / acceptall:<table/chain> / no.
+# table are followed. Same rules as above: only a catch-all drop or policy drop is yes, a drop after a
+# conditional accept is unverified, and specific drops (e.g. fail2ban/sshguard set bans) are partial.
+# Prints yes / acceptall:<table/chain> / unverified:<table/chain rule N> (<reason>) / partial:<detail> / no.
 nft_input_filters() {
   awk '
     function opens(s) { return gsub(/\{/, "{", s) }
     function closes(s) { return gsub(/\}/, "}", s) }
-    function walk(c, depth,   i, l, r) {
+    # the rule without counter/log statements, so "counter drop" counts as an unconditional drop
+    function bare(s) { gsub(/(^| )counter( packets [0-9]+ bytes [0-9]+)?( |$)/, " ", s); gsub(/(^| )log( prefix "[^"]*"| level [a-z]+)*( |$)/, " ", s)
+                       gsub(/ +/, " ", s); sub(/^ /, "", s); sub(/ $/, "", s); return s }
+    function walk(c, depth, pc,   i, l, b, r, t, u) {
       if (depth > 30 || (c in busy)) return 0
       busy[c]=1
       for (i=1; i<=n[c]; i++) {
-        l=rl[c,i]
-        if (l ~ /(^|[[:space:]])(drop|reject)([[:space:]]|$)/ || l ~ /reject with /) { delete busy[c]; return 1 }
-        if (l ~ /^(counter( packets [0-9]+ bytes [0-9]+)? )?accept$/) { delete busy[c]; return 2 }
-        if (l ~ /^(counter( packets [0-9]+ bytes [0-9]+)? )?return$/) { delete busy[c]; return 0 }
+        l=rl[c,i]; b=bare(l)
+        if (l ~ /(^|[[:space:]])(drop|reject)([[:space:]]|$)/ || l ~ /reject with /) {
+          if (!pc && b ~ /^(drop|reject( with .*)?)$/) { delete busy[c]; return 1 }
+          if (ca != "") { if (sh=="") sh=c " rule " i } else { np++; if (pt=="") pt=c " rule " i }
+          continue }
+        if (b=="accept") { delete busy[c]; return 2 }
+        if (l ~ /(^|[[:space:]])accept([[:space:],}]|$)/) { if (ca=="") ca=c " rule " i; continue }
+        if (b=="return") { delete busy[c]; return 0 }
         if (match(l, /(jump|goto) [^ ;}]+/)) { t=substr(l, RSTART, RLENGTH); sub(/^(jump|goto) /, "", t); t=tb[c] "/" t
-          r=walk(t, depth+1); if (r==1) { delete busy[c]; return 1 }
-          if (r==2 && l ~ /^(counter( packets [0-9]+ bytes [0-9]+)? )?(jump|goto) [^ ]+$/) { delete busy[c]; return 2 } }
+          u=(b ~ /^(jump|goto) [^ ]+$/)
+          r=walk(t, depth+1, (pc || !u)); if (r==1) { delete busy[c]; return 1 }
+          if (r==2 && u) { delete busy[c]; return 2 }
+          if (r==2 && ca=="") ca=c " rule " i " (jump to " t ")" }
       }
       delete busy[c]; return 0
     }
@@ -225,8 +252,14 @@ nft_input_filters() {
       if (depth<=1) inch=0
     }
     END {
-      acc=""
-      for (c in hook) { r=walk(c, 0); if (r==1 || (r==0 && pd[c])) { print "yes"; exit } if (r==2 && acc=="") acc=c }
+      acc=""; unv=""; part=""; tot=0
+      for (c in hook) { ca=""; sh=""; pt=""; np=0; r=walk(c, 0, 0)
+        if (r==1 || (r==0 && pd[c])) { print "yes"; exit }
+        if (sh != "") { if (unv=="") unv=sh " (DROP/REJECT after a conditional ACCEPT at " ca ")" }
+        else if (np) { tot+=np; if (part=="") part=pt "; then " (r==2 ? "accept-all" : "policy accept") " in " c }
+        else if (r==2 && acc=="") acc=c }
+      if (unv != "") { print "unverified:" unv; exit }
+      if (tot) { print "partial:" tot " specific drop/reject rule(s), first " part; exit }
       if (acc != "") { print "acceptall:" acc; exit }
       print "no"
     }'
@@ -255,15 +288,24 @@ if have iptables; then
   if out=$(iptables -S 2>/dev/null); then fwread=1; fwres+=("iptables:$(ipt_input_filters <<<"$out")")
   else notes+=("iptables -S needs root"); fi
 fi
-fwyes=""; fwacc=""
+fwyes=""; fwacc=""; fwunv=""; fwpart=""
 for r in "${fwres[@]}"; do
-  case ${r#*:} in yes) fwyes+="${fwyes:+ and }${r%%:*}" ;; acceptall:*) fwacc+="${fwacc:+; }${r%%:*} ${r#*:acceptall:}" ;; esac
+  case ${r#*:} in
+    yes) fwyes+="${fwyes:+ and }${r%%:*}" ;;
+    acceptall:*) fwacc+="${fwacc:+; }${r%%:*} ${r#*:acceptall:}" ;;
+    unverified:*) fwunv+="${fwunv:+; }${r%%:*} ${r#*:unverified:}" ;;
+    partial:*) fwpart+="${fwpart:+; }${r%%:*}: ${r#*:partial:}" ;;
+  esac
 done
 if [[ -n $fwyes ]]; then
-  pass "INPUT filtering verified in ${fwyes}: a DROP/REJECT rule or policy is reachable on the INPUT path (ports are not analysed one by one)"
+  pass "INPUT filtering verified in ${fwyes}: the INPUT path ends in a catch-all DROP/REJECT rule or policy (ports are not analysed one by one)"
   [[ -n $fwacc ]] && info "Not filtering on its own: ${fwacc} (accepts everything first)"
-elif [[ -n $fwacc ]]; then
-  warn "Firewall does not filter: ${fwacc} accepts all traffic before any DROP/REJECT is reached${mgr:+ (manager active: ${mgr[*]})}"
+  [[ -n $fwunv ]] && info "Not verified on its own: ${fwunv}"
+  [[ -n $fwpart ]] && info "No catch-all DROP on its own: ${fwpart}"
+elif [[ -n $fwacc || -n $fwunv || -n $fwpart ]]; then
+  [[ -n $fwacc ]] && warn "Firewall does not filter: ${fwacc} accepts all traffic before any DROP/REJECT is reached${mgr:+ (manager active: ${mgr[*]})}"
+  [[ -n $fwunv ]] && warn "INPUT filtering UNVERIFIED in ${fwunv}: a DROP rule exists, but an earlier ACCEPT rule may let the same traffic through first; check the rule order manually"
+  [[ -n $fwpart ]] && warn "No catch-all DROP on the INPUT path (${fwpart}): only specific DROP/REJECT rules such as fail2ban bans or single ports; traffic not explicitly blocked is allowed"
 elif (( fwread )); then
   warn "No reachable DROP/REJECT rule or DROP policy on the INPUT path${mgr:+, although ${mgr[*]} is active}"
 elif (( ${#mgr[@]} )); then

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Restic Backup Script for Offsite Backups (v1.1.0) - from srvScripts.com
+# Restic Backup Script for Offsite Backups (v1.2.0) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/restic-offsite-backup/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # restic-offsite-backup.sh — cron-safe restic wrapper: MySQL dumps, backup, retention, periodic integrity check
 # https://srvscripts.com/scripts/restic-offsite-backup/   License: MIT
-# Version: 1.1.0
+# Version: 1.2.0
 #
 # Reads /etc/srvscripts/restic.conf (KEY=value lines, never executed), optionally dumps every
 # MariaDB/MySQL database, runs `restic backup`, `restic forget --prune` with your keep policy and,
@@ -16,15 +16,19 @@
 #   bash restic-offsite-backup.sh --list           # snapshots
 #   bash restic-offsite-backup.sh --restore-test   # restore one random file and compare checksums
 # Safety: DUMP_DIR must be a directory this script created (it holds a .srvscripts-restic-dump marker)
-# or an empty one; only the dump files this script wrote are ever deleted. If any requested path or
+# or an empty one. Each run dumps into its own new DUMP_DIR/run.XXXXXX workspace without overwriting
+# anything and deletes only files it created there (or that a killed earlier run recorded in its own
+# workspace); nothing else in DUMP_DIR is changed or deleted. If any requested path or
 # database dump is missing, or restic could not read every file, retention (forget --prune) is skipped
 # so older complete snapshots are kept; set ALLOW_PARTIAL_PRUNE=yes to override.
 # Exit codes: 0 OK, 1 backup/prune/check/restore problem or another run holds the lock, 2 config error.
+# 1.2.0: dumps go to a per-run workspace DUMP_DIR/run.XXXXXX, are created exclusively (no overwrite, no
+#        symlink following) and only this run's own files are deleted; sanitised DB file names get a hash.
 set -uo pipefail
 export LC_ALL=C
 unset RESTIC_PASSWORD RESTIC_PASSWORD_COMMAND        # the password comes from RESTIC_PASSWORD_FILE only
 
-SCRIPT_VERSION=1.1.0
+SCRIPT_VERSION=1.2.0
 CONF=/etc/srvscripts/restic.conf; MODE=backup; DRY=0; YES=0; VERBOSE=0
 STATE_DIR=/var/lib/srvscripts; TAG=srvscripts; HOST=$(hostname)
 
@@ -93,14 +97,17 @@ perm_warn "$RESTIC_PASSWORD_FILE"; perm_warn "$CONF"
 
 # ---- helpers -----------------------------------------------------------------------------------------
 OUT=$(mktemp) || exit 2
-RESTORE_TMP=""; CREATED=()
+RESTORE_TMP=""; CREATED=(); RUN_DIR=""
 MARKER=.srvscripts-restic-dump
-cleanup() {   # removes only files this run created: never anything else in DUMP_DIR
+RUN_MARKER=.srvscripts-restic-run           # in each run workspace: header line, then the dump names that run created
+RUN_FLAG=.srvscripts-restic-incomplete      # present while a run is still dumping; restic skips such workspaces
+cleanup() {   # removes only files this run created inside its own run workspace: never anything else in DUMP_DIR
   local f
   rm -f "$OUT"
   [[ -n "$RESTORE_TMP" ]] && rm -rf "$RESTORE_TMP"
-  for f in "${CREATED[@]}"; do [[ -f "$f" && ! -L "$f" ]] && rm -f -- "$f"; done
-  (( ${#CREATED[@]} )) && rm -f -- "${CFG[DUMP_DIR]}/$MARKER.files"
+  [[ -n "$RUN_DIR" && -d "$RUN_DIR" && ! -L "$RUN_DIR" ]] || return 0
+  for f in "${CREATED[@]}"; do [[ "$f" == "$RUN_DIR/"* && -f "$f" && ! -L "$f" ]] && rm -f -- "$f"; done
+  rmdir -- "$RUN_DIR" 2>/dev/null || log "WARN kept $RUN_DIR: it holds files this run did not create"
 }
 trap cleanup EXIT
 trap 'exit 1' INT TERM HUP     # so cleanup also runs when cron or an admin stops the run
@@ -151,6 +158,7 @@ dumpdir_ok() {
     owner=$(stat -c %u -- "$dir") mode=$(stat -c %a -- "$dir")
     [[ "$owner" == "$EUID" ]] || { log "FAIL DUMP_DIR '$dir' is owned by uid $owner, not by the user running this script"; return 1; }
     (( 8#$mode & 8#022 )) && { log "FAIL DUMP_DIR '$dir' is writable by group or others (mode $mode)"; return 1; }
+    [[ -L "$dir/$MARKER" ]] && { log "FAIL $dir/$MARKER is a symlink; this script never creates one"; return 1; }
     if [[ ! -f "$dir/$MARKER" ]]; then
       n=$(find "$dir" -mindepth 1 -maxdepth 1 2>/dev/null | head -n 1)
       [[ -z "$n" ]] || { log "FAIL DUMP_DIR '$dir' already contains files and was not created by this script (no $MARKER marker); choose an empty or new directory. Nothing was deleted."; return 1; }
@@ -159,38 +167,73 @@ dumpdir_ok() {
   return 0
 }
 
-dump_mysql() {   # dump every database to DUMP_DIR, one .sql per database
-  local client dumper db f name n ok=0 bad=0 dir=${CFG[DUMP_DIR]} prev
+# Workspaces left by an earlier run that was killed (power loss, kill -9): only directories named
+# run.XXXXXX that carry our run marker are touched, only the dump names that marker lists are deleted,
+# and the directory is removed only if nothing else is left in it.
+clean_stale_runs() {
+  local dir=$1 d prev rest
+  for d in "$dir"/run.*; do
+    [[ "$d" != "$RUN_DIR" && "${d##*/}" =~ ^run\.[A-Za-z0-9]{6}$ && -d "$d" && ! -L "$d" ]] || continue
+    [[ -f "$d/$RUN_MARKER" && ! -L "$d/$RUN_MARKER" && "$(stat -c %u -- "$d")" == "$EUID" ]] ||
+      { log "WARN $d has no run marker of this script; left alone"; continue; }
+    while IFS= read -r prev; do
+      [[ "$prev" =~ ^[A-Za-z0-9._-]+\.sql(\.part)?$ && -f "$d/$prev" && ! -L "$d/$prev" ]] && rm -f -- "$d/$prev"
+    done < "$d/$RUN_MARKER"
+    rest=$(find "$d" -mindepth 1 -maxdepth 1 ! -name "$RUN_MARKER" ! -name "$RUN_FLAG" 2>/dev/null | head -n 1)
+    if [[ -z "$rest" ]]; then
+      [[ -f "$d/$RUN_FLAG" && ! -L "$d/$RUN_FLAG" ]] && rm -f -- "$d/$RUN_FLAG"
+      rm -f -- "$d/$RUN_MARKER"; rmdir -- "$d" 2>/dev/null && log "INFO removed workspace of an interrupted earlier run: $d"
+    else log "WARN $d (interrupted earlier run) holds files this script did not create; left alone"; fi
+  done
+}
+
+dump_mysql() {   # dump every database into a new run workspace DUMP_DIR/run.XXXXXX, one .sql per database
+  local client dumper db f name n why ok=0 bad=0 dir=${CFG[DUMP_DIR]}
   local -a margs dbs
+  local -A seen=()
   client=$(command -v mariadb || command -v mysql) || { log "FAIL MYSQL_DUMP=yes but no mysql/mariadb client"; return 1; }
   dumper=$(command -v mariadb-dump || command -v mysqldump) || { log "FAIL MYSQL_DUMP=yes but no mysqldump/mariadb-dump"; return 1; }
   dumpdir_ok "$dir" || return 1
   read -ra margs <<< "${CFG[MYSQL_ARGS]:-}"
   mapfile -t dbs < <("$client" "${margs[@]}" -N -B -e 'SHOW DATABASES' 2>>"$LOG" | grep -Ev '^(information_schema|performance_schema|sys)$')
   (( ${#dbs[@]} )) || { log "FAIL cannot list databases (check MYSQL_ARGS or /root/.my.cnf)"; return 1; }
-  if (( DRY )); then log "DRY-RUN would dump ${#dbs[@]} database(s) to $dir"; return 0; fi
+  if (( DRY )); then log "DRY-RUN would dump ${#dbs[@]} database(s) to a new workspace $dir/run.XXXXXX"; return 0; fi
   if [[ ! -d "$dir" ]]; then mkdir -p -- "$dir" || { log "FAIL cannot create $dir"; return 1; }; fi
-  chmod 700 -- "$dir" && printf 'Created by restic-offsite-backup.sh (srvscripts.com). Only files listed in %s.files are deleted.\n' "$MARKER" > "$dir/$MARKER" ||
+  chmod 700 -- "$dir" && { [[ -f "$dir/$MARKER" && ! -L "$dir/$MARKER" ]] ||
+    ( set -o noclobber; printf 'Created by restic-offsite-backup.sh (srvscripts.com). Each run works in its own run.XXXXXX directory; nothing else here is deleted.\n' > "$dir/$MARKER" ); } ||
     { log "FAIL cannot write the marker in $dir"; return 1; }
-  # dumps left by an interrupted earlier run: remove only the names that run recorded
-  if [[ -f "$dir/$MARKER.files" ]]; then
-    while IFS= read -r prev; do
-      [[ "$prev" =~ ^[A-Za-z0-9._-]+\.sql(\.part)?$ && -f "$dir/$prev" && ! -L "$dir/$prev" ]] && rm -f -- "$dir/$prev"
-    done < "$dir/$MARKER.files"
-  fi
-  : > "$dir/$MARKER.files"
-  n=$(find "$dir" -mindepth 1 -maxdepth 1 ! -name "$MARKER" ! -name "$MARKER.files" 2>/dev/null | wc -l)
-  (( n )) && log "WARN $dir contains $n file(s) this script did not create; they are left alone and will be included in the backup"
+  [[ -e "$dir/$MARKER.files" ]] && log "WARN $dir/$MARKER.files was left by an interrupted 1.1.x run; the dumps it lists are no longer deleted automatically, check and remove them yourself"
+  clean_stale_runs "$dir"
+  n=$(find "$dir" -mindepth 1 -maxdepth 1 ! -name "$MARKER" 2>/dev/null | wc -l)
+  (( n )) && log "WARN $dir contains $n item(s) this run did not create; they are never changed or deleted and are included in the backup"
+  # the run workspace: a new directory only this run uses (mktemp creates it exclusively, mode 700)
+  RUN_DIR=$(mktemp -d "$dir/run.XXXXXX") && [[ "$RUN_DIR" == "$dir"/run.* && -d "$RUN_DIR" && ! -L "$RUN_DIR" ]] ||
+    { log "FAIL cannot create a run workspace in $dir"; RUN_DIR=""; return 1; }
+  ( set -o noclobber; : > "$RUN_DIR/$RUN_FLAG" ) 2>>"$LOG" && CREATED+=("$RUN_DIR/$RUN_FLAG") &&
+  ( set -o noclobber; printf 'restic-offsite-backup %s run workspace (pid %s, %s); dump files it created:\n' "$SCRIPT_VERSION" "$$" "$(date '+%F %T')" > "$RUN_DIR/$RUN_MARKER" ) 2>>"$LOG" &&
+    CREATED+=("$RUN_DIR/$RUN_MARKER") || { log "FAIL cannot write the run marker in $RUN_DIR"; return 1; }
   for db in "${dbs[@]}"; do
-    name=$(printf '%s' "$db" | tr -c 'A-Za-z0-9._-' '_'); f="$dir/$name.sql"
-    printf '%s\n%s\n' "$name.sql" "$name.sql.part" >> "$dir/$MARKER.files"
-    CREATED+=("$f" "$f.part")
-    if "$dumper" "${margs[@]}" --single-transaction --quick --routines --events --triggers --databases "$db" > "$f.part" 2>>"$LOG" &&
-       mv -f -- "$f.part" "$f"; then
-      ok=$((ok + 1))
-    else bad=$((bad + 1)); rm -f -- "$f.part"; log "WARN dump of database '$db' failed (details in $LOG)"; fi
+    name=$(printf '%s' "$db" | tr -c 'A-Za-z0-9._-' '_')
+    # sanitising is lossy ('a b' and 'a?b' both give a_b): a changed name gets a hash of the real one
+    [[ "$name" == "$db" ]] || name="$name-$(printf '%s' "$db" | sha256sum | cut -c1-8)"
+    f="$RUN_DIR/$name.sql"
+    why=""
+    if [[ -n "${seen[$name]:-}" ]]; then why="database '${seen[$name]}' already uses $name.sql"
+    elif [[ -e "$f" || -L "$f" || -e "$f.part" || -L "$f.part" ]]; then why="$name.sql or $name.sql.part already exists"; fi
+    [[ -z "$why" ]] || { bad=$((bad + 1)); log "WARN database '$db' NOT dumped: $why; nothing was overwritten"; continue; }
+    seen[$name]=$db
+    # exclusive create: noclobber refuses any existing file or symlink (the -e/-L test above covers fifos/devices)
+    set -o noclobber
+    if { exec 8>"$f.part"; } 2>>"$LOG"; then
+      set +o noclobber; CREATED+=("$f.part"); printf '%s\n' "$name.sql.part" >> "$RUN_DIR/$RUN_MARKER"
+      if "$dumper" "${margs[@]}" --single-transaction --quick --routines --events --triggers --databases "$db" >&8 2>>"$LOG" &&
+         exec 8>&- && mv -n -T -- "$f.part" "$f" 2>>"$LOG" && [[ ! -e "$f.part" && ! -L "$f.part" && -f "$f" && ! -L "$f" ]]; then
+        CREATED+=("$f"); printf '%s\n' "$name.sql" >> "$RUN_DIR/$RUN_MARKER"; ok=$((ok + 1))
+      else exec 8>&-; bad=$((bad + 1)); [[ -f "$f.part" && ! -L "$f.part" ]] && rm -f -- "$f.part"; log "WARN dump of database '$db' failed (details in $LOG)"; fi
+    else set +o noclobber; bad=$((bad + 1)); log "WARN database '$db' NOT dumped: cannot create $f.part exclusively; nothing was overwritten"; fi
   done
-  log "INFO dumped $ok of ${#dbs[@]} database(s) to $dir ($(du -sh "$dir" | cut -f1))"
+  rm -f -- "$RUN_DIR/$RUN_FLAG"     # finished: only complete dumps are left in the workspace
+  log "INFO dumped $ok of ${#dbs[@]} database(s) to $RUN_DIR ($(du -sh "$RUN_DIR" | cut -f1))"
   (( bad == 0 ))
 }
 
@@ -216,6 +259,7 @@ do_backup() {
   for p in "${excl[@]}"; do args+=(--exclude "$p"); done
   [[ -n "${CFG[EXCLUDE_FILE]:-}" ]] && args+=(--exclude-file "${CFG[EXCLUDE_FILE]}")
   [[ -n "${CFG[LIMIT_UPLOAD]:-}" ]] && args+=(--limit-upload "${CFG[LIMIT_UPLOAD]}")
+  [[ "${CFG[MYSQL_DUMP],,}" =~ ^(yes|1|true)$ ]] && args+=(--exclude-if-present "$RUN_FLAG")   # skips workspaces of killed runs
   (( DRY )) && args+=(--dry-run -v)
   (( status )) && args+=(--tag incomplete)     # visible in --list; such a snapshot never triggers pruning
   log "INFO backup of ${paths[*]} to $RESTIC_REPOSITORY$( (( DRY )) && echo ' (dry run)')"

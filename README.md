@@ -11,7 +11,7 @@ Download a single file from [scr.srvscripts.com](https://scr.srvscripts.com/) an
 | Script | File | Version |
 |---|---|---|
 | [Access Log Top IPs and Bots Report](https://srvscripts.com/scripts/web-log-top-ips/) | [`web-log-top-ips.sh`](web-log-top-ips/web-log-top-ips.sh) | 1.0.0 |
-| [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](https://srvscripts.com/scripts/asterisk-recordings-to-mp3/) | [`asterisk-recordings-to-mp3.sh`](asterisk-recordings-to-mp3/asterisk-recordings-to-mp3.sh) | 1.0.0 |
+| [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](https://srvscripts.com/scripts/asterisk-recordings-to-mp3/) | [`asterisk-recordings-to-mp3.sh`](asterisk-recordings-to-mp3/asterisk-recordings-to-mp3.sh) | 1.1.0 |
 | [AutoSSL DCV Failures Report](https://srvscripts.com/scripts/autossl-failure-report/) | [`autossl-failure-report.sh`](autossl-failure-report/autossl-failure-report.sh) | 1.0.0 |
 | [Backup Verify Script](https://srvscripts.com/scripts/backup-verify/) | [`backup-verify.sh`](backup-verify/backup-verify.sh) | 2.1.1 |
 | [cPanel Account Inventory](https://srvscripts.com/scripts/cpanel-account-inventory/) | [`cpanel-account-inventory.sh`](cpanel-account-inventory/cpanel-account-inventory.sh) | 1.0.0 |
@@ -19,16 +19,16 @@ Download a single file from [scr.srvscripts.com](https://scr.srvscripts.com/) an
 | [cPanel PHP Version Audit](https://srvscripts.com/scripts/cpanel-php-version-audit/) | [`cpanel-php-version-audit.sh`](cpanel-php-version-audit/cpanel-php-version-audit.sh) | 1.0.0 |
 | [Disk and Inode Alert](https://srvscripts.com/scripts/disk-inode-alert/) | [`disk-inode-alert.sh`](disk-inode-alert/disk-inode-alert.sh) | 1.0.0 |
 | [Exim Mail Queue Report](https://srvscripts.com/scripts/exim-mail-queue-report/) | [`exim-mail-queue-report.sh`](exim-mail-queue-report/exim-mail-queue-report.sh) | 1.0.0 |
-| [Inode Usage Report: Top Directories by File Count per Account](https://srvscripts.com/scripts/inode-usage-report/) | [`inode-usage-report.sh`](inode-usage-report/inode-usage-report.sh) | 1.0.0 |
+| [Inode Usage Report: Top Directories by File Count per Account](https://srvscripts.com/scripts/inode-usage-report/) | [`inode-usage-report.sh`](inode-usage-report/inode-usage-report.sh) | 1.1.0 |
 | [MariaDB Slow Query Log Summary](https://srvscripts.com/scripts/mariadb-slow-query-summary/) | [`mariadb-slow-query-summary.sh`](mariadb-slow-query-summary/mariadb-slow-query-summary.sh) | 1.0.0 |
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |
 | [Redirect Chain Checker](https://srvscripts.com/scripts/redirect-tester/) | [`redirect-tester.sh`](redirect-tester/redirect-tester.sh) | 1.0.0 |
-| [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.1.0 |
+| [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.2.0 |
 | [Server Inventory Report](https://srvscripts.com/scripts/server-inventory-report/) | [`server-inventory-report.sh`](server-inventory-report/server-inventory-report.sh) | 1.0.1 |
-| [Server Security Audit Script](https://srvscripts.com/scripts/server-security-audit/) | [`server-security-audit.sh`](server-security-audit/server-security-audit.sh) | 2.2.1 |
+| [Server Security Audit Script](https://srvscripts.com/scripts/server-security-audit/) | [`server-security-audit.sh`](server-security-audit/server-security-audit.sh) | 2.3.0 |
 | [SSL Expiry Check Script: Free Network Test for Web and Mail](https://srvscripts.com/scripts/ssl-expiry-check/) | [`ssl-expiry-check.sh`](ssl-expiry-check/ssl-expiry-check.sh) | 1.1.0 |
-| [WordPress Version Audit: Find Every WordPress Site and Its Version](https://srvscripts.com/scripts/wordpress-version-audit/) | [`wordpress-version-audit.sh`](wordpress-version-audit/wordpress-version-audit.sh) | 1.0.0 |
+| [WordPress Version Audit: Find Every WordPress Site and Its Version](https://srvscripts.com/scripts/wordpress-version-audit/) | [`wordpress-version-audit.sh`](wordpress-version-audit/wordpress-version-audit.sh) | 1.1.0 |
 
 ## PowerShell
 
@@ -48,7 +48,7 @@ Download a single file from [scr.srvscripts.com](https://scr.srvscripts.com/) an
 | [Kerberos RC4 Audit Script: Find RC4 Accounts and Tickets](https://srvscripts.com/scripts/kerberos-rc4-audit/) | [`Get-KerberosRC4Usage.ps1`](kerberos-rc4-audit/Get-KerberosRC4Usage.ps1) | 1.0.0 |
 | [Locked Out AD Users Report: PowerShell Script with Lockout Source](https://srvscripts.com/scripts/ad-locked-out-users-report/) | [`Get-ADLockoutReport.ps1`](ad-locked-out-users-report/Get-ADLockoutReport.ps1) | 1.0.0 |
 | [Microsoft 365 MFA Status Report: PowerShell Script for Graph](https://srvscripts.com/scripts/m365-mfa-status-report/) | [`Get-M365MfaReport.ps1`](m365-mfa-status-report/Get-M365MfaReport.ps1) | 1.0.0 |
-| [Microsoft 365 User Offboarding PowerShell Script (with -WhatIf)](https://srvscripts.com/scripts/m365-user-offboarding/) | [`Invoke-M365Offboarding.ps1`](m365-user-offboarding/Invoke-M365Offboarding.ps1) | 1.0.0 |
+| [Microsoft 365 User Offboarding PowerShell Script (with -WhatIf)](https://srvscripts.com/scripts/m365-user-offboarding/) | [`Invoke-M365Offboarding.ps1`](m365-user-offboarding/Invoke-M365Offboarding.ps1) | 1.1.0 |
 | [NTFS Permissions Report to CSV: PowerShell Folder ACL Script](https://srvscripts.com/scripts/ntfs-permissions-report/) | [`Get-NTFSPermissionReport.ps1`](ntfs-permissions-report/Get-NTFSPermissionReport.ps1) | 1.0.0 |
 | [Secure Boot 2023 Certificate Check: PowerShell Script for Many PCs](https://srvscripts.com/scripts/secure-boot-cert-check/) | [`Get-SecureBootCertStatus.ps1`](secure-boot-cert-check/Get-SecureBootCertStatus.ps1) | 1.0.0 |
 

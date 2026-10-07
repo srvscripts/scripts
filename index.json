@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-06T22:53:22+00:00",
+    "generated": "2026-10-07T01:24:06+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -68,11 +68,11 @@
             "title": "Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings",
             "file": "asterisk-recordings-to-mp3.sh",
             "url": "https://scr.srvscripts.com/asterisk-recordings-to-mp3/asterisk-recordings-to-mp3.sh",
-            "sha256": "5231041f3d694d5039f239373b570e9673895ef8d7ee373c7ec127557371ea4d",
+            "sha256": "ba1f009e6ceed2d1e77d789a6a718b20079ad48a847a9e4e95e536c25bb29c5a",
             "page": "https://srvscripts.com/scripts/asterisk-recordings-to-mp3/",
             "language": "Bash",
-            "version": "1.0.0",
-            "updated": "2026-10-06",
+            "version": "1.1.0",
+            "updated": "2026-10-07",
             "summary": "Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, \u00b5-law, SLN) to small mono MP3 files from cron, verifies each file and keeps the FreePBX call log player working."
         },
         {
@@ -236,11 +236,11 @@
             "title": "Inode Usage Report: Top Directories by File Count per Account",
             "file": "inode-usage-report.sh",
             "url": "https://scr.srvscripts.com/inode-usage-report/inode-usage-report.sh",
-            "sha256": "73aba4af5ff15079e4c59e8ddaa2437ba960f437d3748e612b286b1f46218704",
+            "sha256": "8178f4529199aa9b79019f23ff7afd96a15a70373df3bff3c1810ac85a774562",
             "page": "https://srvscripts.com/scripts/inode-usage-report/",
             "language": "Bash",
-            "version": "1.0.0",
-            "updated": "2026-10-06",
+            "version": "1.1.0",
+            "updated": "2026-10-07",
             "summary": "Free bash script that reports inode usage per cPanel or DirectAdmin account, flags accounts over thresholds and lists the folders holding the most files."
         },
         {
@@ -308,11 +308,11 @@
             "title": "Microsoft 365 User Offboarding PowerShell Script (with -WhatIf)",
             "file": "Invoke-M365Offboarding.ps1",
             "url": "https://scr.srvscripts.com/m365-user-offboarding/Invoke-M365Offboarding.ps1",
-            "sha256": "15afe1062e6900da96f52b27485e0550add5ba7b39caba08e63749237999f272",
+            "sha256": "34350f40d41c141cff54e00348202a69909dfe3a9883ac283c3c37486d544de7",
             "page": "https://srvscripts.com/scripts/m365-user-offboarding/",
             "language": "PowerShell",
-            "version": "1.0.0",
-            "updated": "2026-10-06",
+            "version": "1.1.0",
+            "updated": "2026-10-07",
             "summary": "Free PowerShell script for Microsoft 365 offboarding: block sign-in, revoke sessions, shared mailbox, auto-reply, forward to manager, groups and licences, with -WhatIf and a log."
         },
         {
@@ -368,11 +368,11 @@
             "title": "Restic Backup Script for Offsite Backups",
             "file": "restic-offsite-backup.sh",
             "url": "https://scr.srvscripts.com/restic-offsite-backup/restic-offsite-backup.sh",
-            "sha256": "5b0984d5a87e49d36a776bc59dd7eab1d3623324dc3ef620a1dc702ddbda5479",
+            "sha256": "c4304636630e788ccf27a280a19e0fe6bb533f4c6e21f278cefd2df27fa965bc",
             "page": "https://srvscripts.com/scripts/restic-offsite-backup/",
             "language": "Bash",
-            "version": "1.1.0",
-            "updated": "2026-10-03",
+            "version": "1.2.0",
+            "updated": "2026-10-07",
             "summary": "A restic backup script for cron: dumps every MariaDB/MySQL database, backs up to any restic repository, applies daily/weekly/monthly retention, checks integrity and test-restores a random file."
         },
         {
@@ -404,11 +404,11 @@
             "title": "Server Security Audit Script",
             "file": "server-security-audit.sh",
             "url": "https://scr.srvscripts.com/server-security-audit/server-security-audit.sh",
-            "sha256": "01caa849f0f6e0fb725091d22435fdd20a9279b78bc8a8bf21f4555973932831",
+            "sha256": "4a98c6881189b6171d184b91862b6ed320766445b1204022798cab22d0761efa",
             "page": "https://srvscripts.com/scripts/server-security-audit/",
             "language": "Bash",
-            "version": "2.2.1",
-            "updated": "2026-10-06",
+            "version": "2.3.0",
+            "updated": "2026-10-07",
             "summary": "A read-only server security audit script for Linux: SSH, firewall, brute-force protection, updates, ports, sudo and filesystem checks as PASS/WARN lines. Checks it cannot run are SKIP, never PASS."
         },
         {
@@ -428,11 +428,11 @@
             "title": "WordPress Version Audit: Find Every WordPress Site and Its Version",
             "file": "wordpress-version-audit.sh",
             "url": "https://scr.srvscripts.com/wordpress-version-audit/wordpress-version-audit.sh",
-            "sha256": "dca8f02ca73c51e35cf1d61828dd6d829c073c681251a9a5466d828cdb77d13b",
+            "sha256": "a2671c3b94a44f8f47d7f1bb52cbde3052168986dccf916c04914f9dda2a8b19",
             "page": "https://srvscripts.com/scripts/wordpress-version-audit/",
             "language": "Bash",
-            "version": "1.0.0",
-            "updated": "2026-10-06",
+            "version": "1.1.0",
+            "updated": "2026-10-07",
             "summary": "Free bash script that finds every WordPress install on cPanel, DirectAdmin or plain servers and flags core versions below 7.0.3 (CVE-2026-64638)."
         }
     ]
