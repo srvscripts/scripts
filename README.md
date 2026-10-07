@@ -6,6 +6,10 @@ Each script has a page on srvScripts.com that explains what it does, its options
 
 Download a single file from [scr.srvscripts.com](https://scr.srvscripts.com/) and verify it with the `.sha256` file next to it.
 
+[![checks](https://github.com/srvscripts/scripts/actions/workflows/checks.yml/badge.svg)](https://github.com/srvscripts/scripts/actions/workflows/checks.yml)
+
+Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGELOG.md](CHANGELOG.md) and in each script folder. To report a security problem, see [SECURITY.md](SECURITY.md).
+
 ## Bash
 
 | Script | File | Version |

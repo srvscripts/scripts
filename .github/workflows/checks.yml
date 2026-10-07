@@ -1,0 +1,49 @@
+name: checks
+# Runs on every push and pull request. The library is synced from srvScripts.com; a red build blocks nothing on the
+# website, but tells us (and you) that a published file needs attention.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bash:
+    name: Bash scripts and checksums
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax (bash -n)
+        run: |
+          shopt -s nullglob
+          for f in */*.sh; do bash -n "$f" || { echo "::error file=$f::syntax error"; exit 1; }; done
+      - name: ShellCheck (warnings and errors fail the build)
+        run: |
+          shopt -s nullglob
+          shellcheck --version
+          shellcheck -S warning */*.sh
+      - name: Every file matches its .sha256 and index.json
+        run: python3 .github/check_index.py
+  powershell:
+    name: PowerShell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every script, then PSScriptAnalyzer (errors fail the build, warnings are listed)
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -ErrorAction Stop
+          $files = Get-ChildItem -Recurse -Include *.ps1,*.psm1
+          $bad = 0
+          foreach ($f in $files) {
+            $t = $null; $e = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$t, [ref]$e)
+            if ($e) { $bad++; Write-Output "::error file=$($f.Name)::$($e[0].Message)" }
+          }
+          $r = $files | ForEach-Object { Invoke-ScriptAnalyzer -Path $_.FullName -Severity Error,Warning }
+          $r | ForEach-Object { Write-Output "$($_.Severity) $($_.ScriptName):$($_.Line) $($_.RuleName)" }
+          $err = @($r | Where-Object Severity -eq 'Error').Count
+          Write-Output "$($files.Count) files, $bad parse errors, $err analyzer errors"
+          if ($bad -or $err) { exit 1 }
