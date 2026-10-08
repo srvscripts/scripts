@@ -15,7 +15,7 @@ for s in d["scripts"]:
         print(f"::error file={p}::sha256 {h} does not match index.json / {p}.sha256"); fail = 1
     if not re.fullmatch(r"\d+\.\d+\.\d+", s.get("version", "")):
         print(f"::error file={p}::version '{s.get('version')}' is not X.Y.Z"); fail = 1
-folders = {x for x in os.listdir(".") if os.path.isdir(x) and not x.startswith(".")}
+folders = {x for x in os.listdir(".") if os.path.isdir(x) and not x.startswith(".") and x != "tests"}
 for x in sorted(folders - listed):
     print(f"::error::folder {x}/ is not listed in index.json"); fail = 1
 print(f"{len(listed)} scripts checked")

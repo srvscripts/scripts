@@ -1,6 +1,6 @@
 name: checks
-# Runs on every push and pull request. The library is synced from srvScripts.com; a red build blocks nothing on the
-# website, but tells us (and you) that a published file needs attention.
+# Runs on every push and pull request. The library is synced from srvScripts.com. Release tags (<script>/vX.Y.Z)
+# are only created for a commit after every job below has passed; a red build holds the tags until it is fixed.
 on:
   push:
     branches: [main]
@@ -47,3 +47,12 @@ jobs:
           $err = @($r | Where-Object Severity -eq 'Error').Count
           Write-Output "$($files.Count) files, $bad parse errors, $err analyzer errors"
           if ($bad -or $err) { exit 1 }
+  regression:
+    name: Regression fixtures (known inputs, expected verdicts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq restic openssl
+      - name: Run tests/regression.sh
+        run: sudo -E bash tests/regression.sh
