@@ -6,6 +6,10 @@ Newest first. Each version is tagged `backup-verify/vX.Y.Z` in this repository.
 
 Tested on: AlmaLinux 9.8 with DirectAdmin 1.712 (lab test, 6 Oct 2026); AlmaLinux 9.8 with cPanel & WHM 11.138 (lab test, 5 Oct 2026); Ubuntu 24.04 (Bash 5.2, GNU tar 1.35, zstd 1.5.5) against cPanel-style, DirectAdmin-style and mysqldump fixture trees; 2.1.0 also against fixtures for a missing account list, missing accounts, two sources with the same account name and dated cPanel folders (container tests, not yet run on a production server)
 
+## 2.1.2
+
+Header comment now shows the real version (it still said 2.1.0); no change to checks or output.
+
 ## 2.1.1
 
 DirectAdmin admin-level and reseller backups (admin.root.NAME, reseller.CREATOR.NAME) now count toward account coverage; 2.1.0 reported those accounts as missing (found on a DirectAdmin 1.712 test server).
