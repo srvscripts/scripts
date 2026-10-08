@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Backup Verify Script (v2.1.1) - from srvScripts.com
+# Backup Verify Script (v2.1.2) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/backup-verify/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # backup-verify.sh — prove every backup series exists, is fresh, is not shrinking, and opens
 # https://srvscripts.com/scripts/backup-verify/   License: MIT
-# Version: 2.1.0
+# Version: 2.1.2
 #
 # Works on any directory of backup files (cPanel /backup/DATE/accounts, DirectAdmin
 # admin_backups, JetBackup local destinations, mysqldump .sql.gz, tar, zip). Read-only.
@@ -18,7 +18,7 @@
 #       2 = usage error.
 set -uo pipefail
 export LC_ALL=C
-VERSION=2.1.1
+VERSION=2.1.2
 
 usage() {
   cat <<'EOF'

@@ -17,7 +17,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [Access Log Top IPs and Bots Report](https://srvscripts.com/scripts/web-log-top-ips/) | [`web-log-top-ips.sh`](web-log-top-ips/web-log-top-ips.sh) | 1.0.0 |
 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](https://srvscripts.com/scripts/asterisk-recordings-to-mp3/) | [`asterisk-recordings-to-mp3.sh`](asterisk-recordings-to-mp3/asterisk-recordings-to-mp3.sh) | 1.1.0 |
 | [AutoSSL DCV Failures Report](https://srvscripts.com/scripts/autossl-failure-report/) | [`autossl-failure-report.sh`](autossl-failure-report/autossl-failure-report.sh) | 1.0.0 |
-| [Backup Verify Script](https://srvscripts.com/scripts/backup-verify/) | [`backup-verify.sh`](backup-verify/backup-verify.sh) | 2.1.1 |
+| [Backup Verify Script](https://srvscripts.com/scripts/backup-verify/) | [`backup-verify.sh`](backup-verify/backup-verify.sh) | 2.1.2 |
 | [cPanel Account Inventory](https://srvscripts.com/scripts/cpanel-account-inventory/) | [`cpanel-account-inventory.sh`](cpanel-account-inventory/cpanel-account-inventory.sh) | 1.0.0 |
 | [cPanel Disk Usage Report](https://srvscripts.com/scripts/cpanel-disk-usage-report/) | [`cpanel-disk-usage-report.sh`](cpanel-disk-usage-report/cpanel-disk-usage-report.sh) | 1.0.0 |
 | [cPanel PHP Version Audit](https://srvscripts.com/scripts/cpanel-php-version-audit/) | [`cpanel-php-version-audit.sh`](cpanel-php-version-audit/cpanel-php-version-audit.sh) | 1.0.0 |

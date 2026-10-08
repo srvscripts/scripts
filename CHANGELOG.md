@@ -24,7 +24,7 @@ The latest release of every script, most recently updated first. Each script fol
 | 2026-10-06 | [Exchange Online Mailbox Permissions Report: FullAccess, SendAs](exo-mailbox-permissions-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-06 | [Entra ID Inactive Users Report: signInActivity PowerShell Script](entra-inactive-users-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-06 | [Block RDP Brute Force on Windows Server: PowerShell Script](rdp-brute-force-blocker/CHANGELOG.md) | 1.0.1 | WhatIf the change log now says "Would block" and nothing is written to the log file. Tested on a Windows Server 2025 DC. |
-| 2026-10-06 | [Backup Verify Script](backup-verify/CHANGELOG.md) | 2.1.1 | DirectAdmin admin-level and reseller backups (admin.root.NAME, reseller.CREATOR.NAME) now count toward account coverage; 2.1.0 reported those accounts as missin |
+| 2026-10-06 | [Backup Verify Script](backup-verify/CHANGELOG.md) | 2.1.2 | Header comment now shows the real version (it still said 2.1.0); no change to checks or output. |
 | 2026-10-06 | [AD Privileged Group Report: Domain Admins and adminCount Audit](ad-privileged-group-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-06 | [AD Nested Group Membership: PowerShell Tree with Loop Detection](ad-nested-group-membership/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-06 | [AD Health Check Report: dcdiag and repadmin PowerShell Script](ad-health-check-report/CHANGELOG.md) | 1.0.0 | First release. |
