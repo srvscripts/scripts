@@ -4,7 +4,11 @@ File: `asterisk-recordings-to-mp3.sh`. Page: <https://srvscripts.com/scripts/ast
 
 Newest first. Each version is tagged `asterisk-recordings-to-mp3/vX.Y.Z` in this repository.
 
-Tested on: 1.2.1 on Debian 12 with FreePBX 17 and Asterisk 22.11 (lab test, 10 Oct 2026): a recording converted as root with ffmpeg (MP3 owned by asterisk) and a stale hidden temporary file from an interrupted run was removed. 25 stand-in-program regression checks run in CI before every release, including a run killed half-way through writing the MP3 (no partial MP3 left, original kept, next run converts it). 1.2.0 was tested on the same server on 9 Oct 2026 with ffmpeg and sox+lame, including planted links.
+Tested on: 1.2.2 on Debian 12 with FreePBX 17 and Asterisk 22.11 (lab test, 10 Oct 2026): a recording converted as root with ffmpeg and --delete-original (4.39 s MP3 owned by asterisk, original deleted), and a recording whose MP3 name was already a folder was skipped with nothing written into the folder and the original kept. 29 stand-in-program regression checks run in CI before every release, including a folder and a link to a folder created at the MP3 name during conversion (refused, original kept, call log not updated; 1.2.1 fails these) and a run killed half-way through writing the MP3.
+
+## 1.2.2
+
+If a folder, or a link to a folder, appeared at the MP3's name while a recording was being converted, 1.2.1 put the MP3 inside that folder and reported success, so --update-cdr and --delete-original could then act on it. The MP3 is now linked to the exact name only (ln -T) and must be a regular file before the call log or the original is touched; otherwise the recording is reported and kept. Found in an independent review (NEW-AST-DIR); regression fixtures added to CI.
 
 ## 1.2.1
 

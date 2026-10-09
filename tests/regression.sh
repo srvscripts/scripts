@@ -161,9 +161,11 @@ else skp "restic-offsite-backup fixtures (need restic and root)"; fi
 if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
   A=$T/ast; FK=$A/bin; chmod 711 "$T"; mkdir -p "$FK"; chmod 711 "$A"
   printf '%s\n' '#!/bin/bash' 'out="${*: -1}"; printf FAKE-MP3 >"$out"' \
-    '[ -n "${RACE_MP3:-}" ] && [ ! -e "$RACE_MP3" ] && printf OTHER >"$RACE_MP3"; exit 0' > "$FK/ffmpeg"
+    '[ -n "${RACE_MP3:-}" ] && [ ! -e "$RACE_MP3" ] && printf OTHER >"$RACE_MP3"' \
+    '[ -n "${RACE_DIR:-}" ] && mkdir -p "$RACE_DIR" && chown 65534:65534 "$RACE_DIR"' \
+    '[ -n "${RACE_DIRLINK:-}" ] && ln -s "$RACE_DIRLINK_TO" "$RACE_DIRLINK" && chown -h 65534:65534 "$RACE_DIRLINK"; exit 0' > "$FK/ffmpeg"
   printf '%s\n' '#!/bin/bash' 'printf "sample_rate=8000\nnb_samples=8000\n"' > "$FK/ffprobe"
-  printf '%s\n' '#!/bin/bash' 'q="${*: -1}"' 'case "$q" in *"SELECT 1 FROM"*) echo 1 ;; *UPDATE*) [ "${FAKE_CDR:-}" = fail ] && exit 1; echo "${FAKE_ROWS:-1}" ;; *"COUNT(*)"*) echo 0 ;; esac' > "$FK/mysql"
+  printf '%s\n' '#!/bin/bash' 'q="${*: -1}"' 'case "$q" in *"SELECT 1 FROM"*) echo 1 ;; *UPDATE*) [ -n "${CDR_LOG:-}" ] && echo "$q" >>"$CDR_LOG"; [ "${FAKE_CDR:-}" = fail ] && exit 1; echo "${FAKE_ROWS:-1}" ;; *"COUNT(*)"*) echo 0 ;; esac' > "$FK/mysql"
   chmod 755 "$FK"/*
   AST=(env PATH="$FK:$PATH" RECORDINGS_MP3_LOCK="$A/lock" bash "$(S asterisk-recordings-to-mp3)")
   mkrec(){ mkdir -p "$1"; for n in "${@:2}"; do head -c 4000 /dev/urandom > "$1/$n"; done; }
@@ -203,6 +205,14 @@ if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
   chk "asterisk: retried MP3 is complete, owned by the owner, original deleted" 'same "$R5/kill.mp3" FAKE-MP3 && [[ $(stat -c %u $R5/kill.mp3) == 65534 && ! -e $R5/kill.wav ]]'
   chk "asterisk: the stale hidden temporary file of the killed run is removed" '! ls -A "$R5" | grep -q "\.part$" && same "$R5/kill.mp3" FAKE-MP3'
   rm -f "$FK/cat"
+  # NEW-AST-DIR: a folder, or a link to a folder, created at the MP3 name after the existence check must be refused:
+  # no MP3 written inside it, no call log update, original kept, run reported as failed.
+  R6=$A/r6; mkrec "$R6" d.wav; chown -R 65534:65534 "$R6"; touch -d '-10 minutes' "$R6"/d.wav
+  run "asterisk: a folder created at the MP3 name during conversion is refused" 1 "appeared while converting" -- env RACE_DIR="$R6/d.mp3" CDR_LOG="$A/cdr6" "${AST[@]}" --dir "$R6" --update-cdr --delete-original
+  chk "asterisk: nothing written inside that folder, original kept, call log untouched" '[[ -d $R6/d.mp3 && -z $(ls -A "$R6/d.mp3") && -f $R6/d.wav && ! -s $A/cdr6 ]] && ! ls -A "$R6" | grep -q "\.part$"'
+  R7=$A/r7; TD=$A/tdir; mkdir -p "$TD"; chown 65534:65534 "$TD"; mkrec "$R7" l.wav; chown -R 65534:65534 "$R7"; touch -d '-10 minutes' "$R7"/l.wav
+  run "asterisk: a link to a folder created at the MP3 name during conversion is refused" 1 "appeared while converting" -- env RACE_DIRLINK="$R7/l.mp3" RACE_DIRLINK_TO="$TD" CDR_LOG="$A/cdr7" "${AST[@]}" --dir "$R7" --update-cdr --delete-original
+  chk "asterisk: nothing written through that link, original kept, call log untouched" '[[ -L $R7/l.mp3 && -z $(ls -A "$TD") && -f $R7/l.wav && ! -s $A/cdr7 ]] && ! ls -A "$R7" | grep -q "\.part$"'
   R4=$A/r4; mkrec "$R4" rootrec.wav; chown 65534:65534 "$R4"; touch -d '-10 minutes' "$R4"/rootrec.wav
   run "asterisk: root-owned recording in a tenant folder is refused" 1 "owned by root in a folder other users can change" -- "${AST[@]}" --dir "$R4"
   chk "asterisk: refused recording kept, nothing written" '[[ -f $R4/rootrec.wav && ! -e $R4/rootrec.mp3 ]]'
