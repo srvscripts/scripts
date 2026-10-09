@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-08T22:46:02+00:00",
+    "generated": "2026-10-09T01:31:35+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -68,11 +68,11 @@
             "title": "Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings",
             "file": "asterisk-recordings-to-mp3.sh",
             "url": "https://scr.srvscripts.com/asterisk-recordings-to-mp3/asterisk-recordings-to-mp3.sh",
-            "sha256": "ba1f009e6ceed2d1e77d789a6a718b20079ad48a847a9e4e95e536c25bb29c5a",
+            "sha256": "f01c08d076cb91ec07aac1fbdd454cd589cb03ecb8b9a7086550e9d6f55e875d",
             "page": "https://srvscripts.com/scripts/asterisk-recordings-to-mp3/",
             "language": "Bash",
-            "version": "1.1.0",
-            "updated": "2026-10-07",
+            "version": "1.2.0",
+            "updated": "2026-10-09",
             "summary": "Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, \u00b5-law, SLN) to small mono MP3 files from cron, verifies each file and keeps the FreePBX call log player working."
         },
         {

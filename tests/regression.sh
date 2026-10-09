@@ -102,5 +102,46 @@ if command -v restic >/dev/null && [[ $EUID -eq 0 ]]; then
   run "restic-offsite-backup: wrong password fails" "*" "FAIL|wrong password" -- bash "$(S restic-offsite-backup)" --list --config "$R/conf"
 else skp "restic-offsite-backup (needs restic and root)"; fi
 
+# ---- asterisk-recordings-to-mp3: links, collisions and call-log failures never change other files or lose originals ----
+# Fake ffmpeg/ffprobe/mysql in PATH; recordings belong to uid 65534 like a tenant-owned spool. Runs as root (CI does).
+if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
+  A=$T/ast; FK=$A/bin; chmod 711 "$T"; mkdir -p "$FK"; chmod 711 "$A"
+  printf '%s\n' '#!/bin/bash' 'out="${*: -1}"; printf FAKE-MP3 >"$out"' \
+    '[ -n "${RACE_MP3:-}" ] && [ ! -e "$RACE_MP3" ] && printf OTHER >"$RACE_MP3"; exit 0' > "$FK/ffmpeg"
+  printf '%s\n' '#!/bin/bash' 'printf "sample_rate=8000\nnb_samples=8000\n"' > "$FK/ffprobe"
+  printf '%s\n' '#!/bin/bash' 'q="${*: -1}"' 'case "$q" in *"SELECT 1 FROM"*) echo 1 ;; *UPDATE*) [ "${FAKE_CDR:-}" = fail ] && exit 1; echo "${FAKE_ROWS:-1}" ;; *"COUNT(*)"*) echo 0 ;; esac' > "$FK/mysql"
+  chmod 755 "$FK"/*
+  AST=(env PATH="$FK:$PATH" RECORDINGS_MP3_LOCK="$A/lock" bash "$(S asterisk-recordings-to-mp3)")
+  mkrec(){ mkdir -p "$1"; for n in "${@:2}"; do head -c 4000 /dev/urandom > "$1/$n"; done; }
+  same(){ [[ "$(cat "$1" 2>/dev/null)" == "$2" ]]; }
+  chk(){ if eval "$2"; then ok "$1"; else bad "$1"; fi; }
+  printf SENTINEL > "$A/sentinel"; chmod 600 "$A/sentinel"
+  R1=$A/r1/2026/10/09; mkrec "$R1" clean.wav part.wav link.wav exist.wav dangle.wav
+  printf OLDPART > "$R1/part.mp3.part"; ln -s "$A/sentinel" "$R1/link.mp3.part"; printf EXISTING > "$R1/exist.mp3"
+  ln -s "$A/created-by-link" "$R1/dangle.mp3"; ln -s "$A/sentinel" "$R1/evil.wav"
+  chown -R 65534:65534 "$A/r1"; chown -h 65534:65534 "$R1"/*; touch -h -d '-10 minutes' "$R1"/*
+  run "asterisk: ordinary run converts and reports the dangling final link" 0 "dangle\.mp3 is a link" -- "${AST[@]}" --dir "$A/r1"
+  chk "asterisk: clean recording converted, owned by the recording owner" '[[ -f $R1/clean.mp3 && $(stat -c %u $R1/clean.mp3) == 65534 && -f $R1/clean.wav ]]'
+  chk "asterisk: preexisting .mp3.part left untouched" 'same "$R1/part.mp3.part" OLDPART && [[ -f $R1/part.mp3 ]]'
+  chk "asterisk: .mp3.part link to a sentinel: sentinel unchanged" 'same "$A/sentinel" SENTINEL && [[ -L $R1/link.mp3.part ]]'
+  chk "asterisk: existing final MP3 unchanged" 'same "$R1/exist.mp3" EXISTING'
+  chk "asterisk: dangling final link unchanged, no target created" '[[ -L $R1/dangle.mp3 && ! -e $A/created-by-link ]]'
+  chk "asterisk: input link to a sentinel is not converted" '[[ ! -e $R1/evil.mp3 ]] && same "$A/sentinel" SENTINEL'
+  chk "asterisk: all originals kept" '[[ -f $R1/clean.wav && -f $R1/part.wav && -f $R1/link.wav && -f $R1/exist.wav && -f $R1/dangle.wav ]]'
+  R2=$A/r2; mkrec "$R2" race.wav; chown -R 65534:65534 "$R2"; touch -d '-10 minutes' "$R2"/race.wav
+  run "asterisk: an MP3 that appears during conversion is reported" 1 "appeared while converting" -- env RACE_MP3="$R2/race.mp3" "${AST[@]}" --dir "$R2" --delete-original
+  chk "asterisk: the MP3 that appeared is unchanged and the original kept" 'same "$R2/race.mp3" OTHER && [[ -f $R2/race.wav ]]'
+  R3=$A/r3; mkrec "$R3" c1.wav; chown -R 65534:65534 "$R3"; touch -d '-10 minutes' "$R3"/c1.wav
+  run "asterisk: call log update matching no row fails" 1 "matched 0 rows" -- env FAKE_ROWS=0 "${AST[@]}" --dir "$R3" --update-cdr --delete-original
+  chk "asterisk: no-row update keeps the original and removes the MP3" '[[ -f $R3/c1.wav && ! -e $R3/c1.mp3 ]]'
+  run "asterisk: failed call log update fails" 1 "call log update failed" -- env FAKE_CDR=fail "${AST[@]}" --dir "$R3" --update-cdr --delete-original
+  chk "asterisk: failed update keeps the original" '[[ -f $R3/c1.wav && ! -e $R3/c1.mp3 ]]'
+  run "asterisk: successful update deletes the original" 0 "ok  c1\.wav" -- "${AST[@]}" --dir "$R3" --update-cdr --delete-original
+  chk "asterisk: after a good update only the MP3 remains" '[[ ! -e $R3/c1.wav && -f $R3/c1.mp3 ]]'
+  R4=$A/r4; mkrec "$R4" rootrec.wav; chown 65534:65534 "$R4"; touch -d '-10 minutes' "$R4"/rootrec.wav
+  run "asterisk: root-owned recording in a tenant folder is refused" 1 "owned by root in a folder other users can change" -- "${AST[@]}" --dir "$R4"
+  chk "asterisk: refused recording kept, nothing written" '[[ -f $R4/rootrec.wav && ! -e $R4/rootrec.mp3 ]]'
+else skp "asterisk-recordings-to-mp3 fixtures (need root and setpriv)"; fi
+
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))

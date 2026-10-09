@@ -4,12 +4,12 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
+| 2026-10-09 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](asterisk-recordings-to-mp3/CHANGELOG.md) | 1.2.0 | Output files are never written through links or over existing files. Each recording is copied into a private work folder (mktemp -d), encoded and verified there |
 | 2026-10-07 | [WordPress Version Audit: Find Every WordPress Site and Its Version](wordpress-version-audit/CHANGELOG.md) | 1.1.0 | Status words now say what is checked: MINIMUM-MET / BELOW-MINIMUM (against 7.0.3 for CVE-2026-64638 by default) instead of OK / OUTDATED; the threshold and advi |
 | 2026-10-07 | [Server Security Audit Script](server-security-audit/CHANGELOG.md) | 2.3.0 | Firewall check is stricter: PASS only when the INPUT path ends in a catch-all DROP/REJECT (policy or final rule). A DROP that comes after a conditional ACCEPT i |
 | 2026-10-07 | [Restic Backup Script for Offsite Backups](restic-offsite-backup/CHANGELOG.md) | 1.2.0 | Each run dumps into its own new DUMP_DIR/run.XXXXXX workspace: dumps are created exclusively (no overwrite, no symlink following) and only that run's own files  |
 | 2026-10-07 | [Microsoft 365 User Offboarding PowerShell Script (with -WhatIf)](m365-user-offboarding/CHANGELOG.md) | 1.1.0 | Before any group or licence change the script now decides whether the mailbox still needs its Exchange licence (not confirmed as shared, over 50 GB, any hold, a |
 | 2026-10-07 | [Inode Usage Report: Top Directories by File Count per Account](inode-usage-report/CHANGELOG.md) | 1.1.0 | If du fails or reports errors, the account is shown as INCOMPLETE (with the partial count, e.g. 9+) or UNKNOWN instead of a clean 0/OK, and the script exits 3.  |
-| 2026-10-07 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](asterisk-recordings-to-mp3/CHANGELOG.md) | 1.1.0 | Originals are deleted only when encoding, full read-back (positive length matching the original within 1 s or 2%), owner/time copy, rename and, with --update-cd |
 | 2026-10-06 | [Server Inventory Report](server-inventory-report/CHANGELOG.md) | 1.0.1 | ImunifyAV is reported as ImunifyAV (malware scanner only) instead of Imunify360; process titles with spaces, such as cpsrvd (SSL), are shortened to the program  |
 | 2026-10-06 | [Secure Boot 2023 Certificate Check: PowerShell Script for Many PCs](secure-boot-cert-check/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-06 | [Redirect Chain Checker](redirect-tester/CHANGELOG.md) | 1.0.0 | Initial release |

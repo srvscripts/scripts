@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings (v1.1.0) - from srvScripts.com
+# Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings (v1.2.0) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/asterisk-recordings-to-mp3/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # asterisk-recordings-to-mp3.sh — convert Asterisk / FreePBX / Issabel call recordings to MP3 from cron
@@ -18,7 +18,16 @@
 #   bash asterisk-recordings-to-mp3.sh --dry-run
 #   bash asterisk-recordings-to-mp3.sh --older-than 5 --delete-original --update-cdr
 #   */10 * * * * root /usr/local/bin/asterisk-recordings-to-mp3.sh --delete-original --update-cdr >>/var/log/recordings-mp3.log 2>&1
+# Run as root (the cron line above) or as the recordings owner (e.g. asterisk; then MYSQL_ARGS must give that user
+# access to the call log). Root needs setpriv (util-linux) to drop to the owner.
 # Exit codes: 0 all converted (or nothing to do), 1 some files failed, 2 usage error, no encoder, or another run active.
+# Version 1.2.0 (2026-10-09): output files are never written through links or over existing files. Each recording is
+#   copied into a private work folder (mktemp -d) and encoded and checked there; when run as root, the recording is read
+#   and the MP3 created, timed and (if asked) the original deleted as the recording's owner, so a link or file planted
+#   in the recordings folder cannot make root write, read or delete anything else. A final .mp3 that already exists
+#   (or is a link, even a broken one), or appears during conversion, is left untouched and reported; no .mp3.part is
+#   used any more. Root-owned recordings are converted only in folders that only root can change. Lock file
+#   default for root is /run/asterisk-recordings-to-mp3.lock, opened without truncating and never through a link.
 # Version 1.1.0 (2026-10-07): originals are kept unless every step succeeded, including the call log update (1.0.0
 #   deleted them after a failed UPDATE); MP3s are decoded and must match the original's length (zero-length or
 #   truncated output is rejected); owner/time/rename failures count as errors; open recordings are skipped.
@@ -27,7 +36,8 @@ set -uo pipefail
 export LC_ALL=C
 
 DIR=/var/spool/asterisk/monitor; OLDER=2; BITRATE=32; EXTS="wav,WAV,wav49,gsm"; DELETE=0; CDR=0
-DRY=0; DAYS=0; ENCODER=auto; QUIET=0; LOCK=${RECORDINGS_MP3_LOCK:-/run/lock/asterisk-recordings-to-mp3.lock}; CDRDB=asteriskcdrdb
+DRY=0; DAYS=0; ENCODER=auto; QUIET=0; CDRDB=asteriskcdrdb
+if [ "$EUID" -eq 0 ]; then LOCK=${RECORDINGS_MP3_LOCK:-/run/asterisk-recordings-to-mp3.lock}; else LOCK=${RECORDINGS_MP3_LOCK:-/run/lock/asterisk-recordings-to-mp3.lock}; fi
 
 usage() {
   cat <<'EOF'
@@ -49,7 +59,9 @@ Usage: asterisk-recordings-to-mp3.sh [options]
   -q, --quiet          print only the summary and errors
   -h, --help           this help
 Environment: MYSQL_ARGS extra arguments for the mysql client (FreePBX root can use /root/.my.cnf)
-             RECORDINGS_MP3_LOCK lock file (default /run/lock/asterisk-recordings-to-mp3.lock)
+             RECORDINGS_MP3_LOCK lock file (default /run/asterisk-recordings-to-mp3.lock for root,
+                                 /run/lock/asterisk-recordings-to-mp3.lock otherwise)
+             TMPDIR              parent of the private work folder (default /tmp)
 EOF
 }
 die() { echo "ERROR: $*" >&2; exit 2; }
@@ -100,11 +112,39 @@ if [ "$CDR" = 1 ] && [ "$DRY" = 0 ]; then
   "$MYSQL" ${MYSQL_ARGS:-} -N -B -e "SELECT 1 FROM \`$CDRDB\`.cdr LIMIT 1" >/dev/null 2>&1 || die "cannot read $CDRDB.cdr (set MYSQL_ARGS or /root/.my.cnf)"
 fi
 
-# One run at a time.
+# trusted_dir DIR: DIR and every folder above it belong to root and no other user can rename or replace entries
+# in them (not group/world writable, or sticky like /tmp). Used for the work folder and for root-owned recordings.
+trusted_dir() {
+  local d="$1" u a
+  while :; do
+    [ -L "$d" ] && return 1
+    read -r u a < <(stat -c '%u %a' -- "$d" 2>/dev/null) || return 1
+    [ "$u" = 0 ] || return 1
+    if (( (8#$a & 8#022) != 0 && (8#$a & 8#1000) == 0 )); then return 1; fi
+    [ "$d" = / ] && return 0
+    d=$(dirname -- "$d")
+  done
+}
+# as_owner CMD...: run CMD as the current recording's owner ($OU:$OG) when we are root, as ourselves otherwise.
+# Everything that touches the recordings folder goes through this, so a planted link only reaches what the owner
+# could already change.
+OU=0; OG=0
+as_owner() {
+  if [ "$EUID" -eq 0 ] && [ "$OU" != 0 ]; then setpriv --reuid="$OU" --regid="$OG" --clear-groups -- "$@"; else "$@"; fi
+}
+TO=(); have timeout && TO=(timeout 600)
+
 if [ "$DRY" = 0 ]; then
+  [ "$EUID" -ne 0 ] || have setpriv || die "running as root needs setpriv (util-linux) to act as the recordings owner"
+  # One run at a time. Opened for append (never truncates) and never through a link.
   mkdir -p "$(dirname "$LOCK")" 2>/dev/null
-  exec 9>"$LOCK" || die "cannot open lock file $LOCK"
+  [ -L "$LOCK" ] && die "lock file $LOCK is a link, refusing to use it"
+  exec 9>>"$LOCK" || die "cannot open lock file $LOCK"
   flock -n 9 || { echo "Another run is still active, exiting." >&2; exit 2; }
+  # Private work folder: encoding and the read-back check happen here, never in the recordings folder.
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/recordings-mp3.XXXXXXXX") || die "cannot create a work folder in ${TMPDIR:-/tmp}"
+  trap 'rm -rf -- "$WORK"' EXIT
+  [ "$EUID" -ne 0 ] || trusted_dir "$(dirname -- "$WORK")" || die "work folder parent $(dirname -- "$WORK") can be changed by other users; set TMPDIR to a root-only folder"
 fi
 
 # Input options for headerless formats.
@@ -118,7 +158,7 @@ ff_in() {
     sln24) echo "-f s16le -ar 24000 -ac 1" ;; sln32) echo "-f s16le -ar 32000 -ac 1" ;;
     sln48) echo "-f s16le -ar 48000 -ac 1" ;;
     g722) echo "-f g722" ;; g729) echo "-f g729" ;;
-    mp3) echo "-f mp3" ;; # read-back of our own .mp3.part
+    mp3) echo "-f mp3" ;; # read-back of our own MP3 in the work folder
     *) echo "" ;;
   esac
 }
@@ -136,7 +176,7 @@ sox_in() {
     *) echo "" ;;
   esac
 }
-convert() { # $1 input  $2 output.part  $3 extension
+convert() { # $1 input copy  $2 output MP3 (both in the private work folder)  $3 extension
   local in="$1" out="$2" ext="$3" opts
   if [ "$ENCODER" = ffmpeg ]; then
     opts=$(ff_in "$ext")
@@ -182,29 +222,46 @@ for e in "${EXT_LIST[@]}"; do
 done
 FIND=(find "$DIR" -type f \( "${NAMES[@]}" \) -mmin "+$OLDER")
 [ "$DAYS" -gt 0 ] && FIND+=(-mtime "-$DAYS")
+FIND+=(-printf '%U %G %m %T@\0%p\0') # owner, group, mode and time of the file itself (never of a link target)
+
+# publish SRC DST MODE MTIME: create DST as the owner with exclusive creation (set -C), never over an existing file
+# or link. Exit 0 ok, 3 write/mode/time failed (partial DST removed), anything else: DST already existed (untouched).
+publish() {
+  as_owner sh -c 'set -C; umask 077; exec 3>"$1" || exit 4
+    cat >&3 && exec 3>&- && chmod "$2" -- "$1" && touch -d "@$3" -- "$1" || { rm -f -- "$1"; exit 3; }' \
+    sh "$2" "$3" "$4" <"$1"
+}
 
 ok=0; skip=0; busy=0; fail=0; before=0; after=0; start=$(date +%s)
 log "$(date '+%F %T') converting with $ENCODER at ${BITRATE} kbps in $DIR$([ "$DRY" = 1 ] && echo ' (dry run)')"
-while IFS= read -r -d '' f; do
+while IFS= read -r -d '' meta && IFS= read -r -d '' f; do
+  read -r OU OG mode mt <<<"$meta"; mt=${mt%%.*}
   ext="${f##*.}"; base="${f%.*}"; mp3="$base.mp3"
+  if [ -L "$mp3" ]; then echo "WARN: ${mp3#"$DIR"/} is a link, not an MP3: skipped, nothing changed" >&2; skip=$((skip+1)); continue; fi
   if [ -e "$mp3" ]; then skip=$((skip+1)); continue; fi
   # Still being written: changed in the last minute (whatever --older-than says) or held open by Asterisk.
-  m0=$(stat -c %Y:%s "$f" 2>/dev/null) || continue
+  m0=$(stat -c %Y:%s -- "$f" 2>/dev/null) || continue
   if [ $(( $(date +%s) - ${m0%%:*} )) -lt 60 ] || { have fuser && fuser -s "$f" 2>/dev/null; }; then
     log "skip (still recording): ${f#"$DIR"/}"; busy=$((busy+1)); continue
   fi
   if [ "$DRY" = 1 ]; then log "would convert: $f"; ok=$((ok+1)); continue; fi
-  part="$base.mp3.part"; why=""
-  if ! convert "$f" "$part" "$ext"; then why="encoder failed"
-  elif [ "$(stat -c %Y:%s "$f" 2>/dev/null)" != "$m0" ]; then
-    rm -f -- "$part"; log "skip (changed while converting): ${f#"$DIR"/}"; busy=$((busy+1)); continue
-  elif [ "$PROBE" != none ]; then verify "$part" "$f" "$ext"
-  elif [ ! -s "$part" ]; then why="empty MP3"
+  if [ "$EUID" -eq 0 ] && [ "$OU" = 0 ] && ! trusted_dir "$(dirname -- "$f")"; then
+    echo "ERROR: ${f#"$DIR"/}: owned by root in a folder other users can change; not converted, original kept" >&2; fail=$((fail+1)); continue
+  fi
+  why=""; in="$WORK/in.$ext"; out="$WORK/out.mp3"; rm -f -- "$in" "$out"
+  # The owner reads the recording (a link swapped in reaches only what the owner can read); we write the private copy.
+  if ! as_owner ${TO[@]+"${TO[@]}"} cat -- "$f" >"$in" 2>/dev/null; then why="cannot read the recording"
+  elif ! convert "$in" "$out" "$ext"; then why="encoder failed"
+  elif [ "$(stat -c %Y:%s -- "$f" 2>/dev/null)" != "$m0" ]; then
+    log "skip (changed while converting): ${f#"$DIR"/}"; busy=$((busy+1)); continue
+  elif [ "$PROBE" != none ]; then verify "$out" "$in" "$ext"
+  elif [ ! -s "$out" ]; then why="empty MP3"
   fi
   if [ -z "$why" ]; then
-    { chown --reference="$f" "$part" && chmod --reference="$f" "$part" && touch -r "$f" "$part"; } || why="cannot copy owner, mode or time"
+    publish "$out" "$mp3" "$mode" "$mt"; rc=$?
+    if [ "$rc" = 3 ]; then why="cannot write ${mp3##*/} (or set its mode and time)"
+    elif [ "$rc" != 0 ]; then why="${mp3##*/} appeared while converting and was left untouched"; fi
   fi
-  if [ -z "$why" ]; then mv -f -- "$part" "$mp3" || why="cannot rename ${part##*/}"; fi
   if [ -z "$why" ] && [ "$CDR" = 1 ]; then
     old=$(sql_escape "${f##*/}"); new=$(sql_escape "${mp3##*/}")
     rows=$(cdr_sql "UPDATE \`$CDRDB\`.cdr SET recordingfile=REPLACE(recordingfile,'$old','$new') WHERE recordingfile LIKE '%$old'; SELECT ROW_COUNT()") || rows=""
@@ -213,19 +270,19 @@ while IFS= read -r -d '' f; do
       # Keep the MP3 only if the call log already names it (playback must work); otherwise remove it so the next run retries.
       if [[ "$(cdr_sql "SELECT COUNT(*) FROM \`$CDRDB\`.cdr WHERE recordingfile LIKE '%$new'")" =~ ^[1-9] ]]; then
         why="$why, but the call log already names ${mp3##*/} (kept both files, check by hand)"
-      else rm -f -- "$mp3"; fi
+      else as_owner rm -f -- "$mp3"; fi
     fi
   fi
   if [ -n "$why" ]; then
-    rm -f -- "$part"; echo "ERROR: ${f#"$DIR"/}: $why; original kept" >&2; fail=$((fail+1)); continue
+    echo "ERROR: ${f#"$DIR"/}: $why; original kept" >&2; fail=$((fail+1)); continue
   fi
-  sz_in=$(stat -c %s "$f"); sz_out=$(stat -c %s "$mp3"); before=$((before+sz_in)); after=$((after+sz_out))
-  if [ "$DELETE" = 1 ] && ! rm -f -- "$f"; then
+  sz_in=$(stat -c %s -- "$f"); sz_out=$(stat -c %s -- "$mp3"); before=$((before+sz_in)); after=$((after+sz_out))
+  if [ "$DELETE" = 1 ] && ! as_owner rm -f -- "$f"; then
     echo "ERROR: ${f#"$DIR"/}: converted but the original could not be deleted" >&2; fail=$((fail+1)); continue
   fi
   log "ok  ${f#"$DIR"/} -> ${mp3##*/} ($((sz_in/1024)) KB -> $((sz_out/1024)) KB)$([ "$PROBE" = none ] && echo ', not verified')"
   ok=$((ok+1))
-done < <("${FIND[@]}" -print0 2>/dev/null)
+done < <("${FIND[@]}" 2>/dev/null)
 
 hs() { if [ "$1" -ge 1048576 ]; then echo "$(( $1 / 1048576 )) MB"; else echo "$(( $1 / 1024 )) KB"; fi; }
 saved=""; [ "$after" -gt 0 ] && saved=", $(hs "$before") -> $(hs "$after")"
