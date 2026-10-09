@@ -192,6 +192,17 @@ if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
   chk "asterisk: failed update keeps the original" '[[ -f $R3/c1.wav && ! -e $R3/c1.mp3 ]]'
   run "asterisk: successful update deletes the original" 0 "ok  c1\.wav" -- "${AST[@]}" --dir "$R3" --update-cdr --delete-original
   chk "asterisk: after a good update only the MP3 remains" '[[ ! -e $R3/c1.wav && -f $R3/c1.mp3 ]]'
+  # EVE-10: a publish killed half-way must not leave a partial final MP3 that later runs would skip.
+  printf '%s\n' '#!/bin/bash' 'o=$(readlink /proc/$$/fd/1 2>/dev/null)' \
+    'if [ -n "${KILL_PUBLISH:-}" ] && [[ $o == */.*.mp3.*.part ]]; then head -c 3; kill -9 $PPID; exit 1; fi' 'exec /bin/cat "$@"' > "$FK/cat"; chmod 755 "$FK/cat"
+  R5=$A/r5; mkrec "$R5" kill.wav; chown -R 65534:65534 "$R5"; touch -d '-10 minutes' "$R5"/kill.wav
+  run "asterisk: a publish killed half-way is reported as interrupted" 1 "was interrupted" -- env KILL_PUBLISH=1 "${AST[@]}" --dir "$R5" --delete-original
+  chk "asterisk: after the kill there is no final MP3 and the original is kept" '[[ ! -e $R5/kill.mp3 && -f $R5/kill.wav ]] && ls -A "$R5" | grep -q "^\.kill\.mp3\..*\.part$"'
+  for p in "$R5"/.kill.mp3.*.part; do touch -d '-40 minutes' "$p"; done
+  run "asterisk: the next run converts the recording again" 0 "ok  kill\.wav" -- "${AST[@]}" --dir "$R5" --delete-original
+  chk "asterisk: retried MP3 is complete, owned by the owner, original deleted" 'same "$R5/kill.mp3" FAKE-MP3 && [[ $(stat -c %u $R5/kill.mp3) == 65534 && ! -e $R5/kill.wav ]]'
+  chk "asterisk: the stale hidden temporary file of the killed run is removed" '! ls -A "$R5" | grep -q "\.part$" && same "$R5/kill.mp3" FAKE-MP3'
+  rm -f "$FK/cat"
   R4=$A/r4; mkrec "$R4" rootrec.wav; chown 65534:65534 "$R4"; touch -d '-10 minutes' "$R4"/rootrec.wav
   run "asterisk: root-owned recording in a tenant folder is refused" 1 "owned by root in a folder other users can change" -- "${AST[@]}" --dir "$R4"
   chk "asterisk: refused recording kept, nothing written" '[[ -f $R4/rootrec.wav && ! -e $R4/rootrec.mp3 ]]'

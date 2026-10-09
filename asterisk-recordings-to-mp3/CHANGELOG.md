@@ -4,7 +4,11 @@ File: `asterisk-recordings-to-mp3.sh`. Page: <https://srvscripts.com/scripts/ast
 
 Newest first. Each version is tagged `asterisk-recordings-to-mp3/vX.Y.Z` in this repository.
 
-Tested on: 1.2.0 on Debian 12 with FreePBX 17 and Asterisk 22.11 (lab test, 9 Oct 2026): wav and gsm recordings converted as root with ffmpeg and with sox+lame (MP3s owned by asterisk, original time kept); a planted .mp3.part link to a root-only test file and a dangling link at the final MP3 name left the test file unchanged and created nothing at the link target. 18 stand-in-program regression checks run in CI before every release (1.1.0 fails them). Version 1.1.0 was tested on the same server on 7 Oct 2026.
+Tested on: 1.2.1 on Debian 12 with FreePBX 17 and Asterisk 22.11 (lab test, 10 Oct 2026): a recording converted as root with ffmpeg (MP3 owned by asterisk) and a stale hidden temporary file from an interrupted run was removed. 25 stand-in-program regression checks run in CI before every release, including a run killed half-way through writing the MP3 (no partial MP3 left, original kept, next run converts it). 1.2.0 was tested on the same server on 9 Oct 2026 with ffmpeg and sox+lame, including planted links.
+
+## 1.2.1
+
+A run interrupted while writing an MP3 (killed, server reboot, disk full) could leave a partial MP3 at the final name, and later runs then skipped that recording. The MP3 is now written in full to a hidden temporary file next to it and hard-linked into place, never over an existing file or link; a leftover temporary file is removed after 30 minutes and the recording is converted again. Found in an independent review (EVE-10); regression fixtures added to CI.
 
 ## 1.2.0
 

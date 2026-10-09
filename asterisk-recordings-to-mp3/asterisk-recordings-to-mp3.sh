@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings (v1.2.0) - from srvScripts.com
+# Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings (v1.2.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/asterisk-recordings-to-mp3/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # asterisk-recordings-to-mp3.sh — convert Asterisk / FreePBX / Issabel call recordings to MP3 from cron
@@ -21,6 +21,9 @@
 # Run as root (the cron line above) or as the recordings owner (e.g. asterisk; then MYSQL_ARGS must give that user
 # access to the call log). Root needs setpriv (util-linux) to drop to the owner.
 # Exit codes: 0 all converted (or nothing to do), 1 some files failed, 2 usage error, no encoder, or another run active.
+# Version 1.2.1 (2026-10-10): an interrupted run can no longer leave a partial MP3 that later runs skip. The MP3 is
+#   written completely to a hidden temporary file next to its final name and then hard-linked into place (never over an
+#   existing file or link); stale temporary files are cleaned up after 30 minutes. Found in an independent review (EVE-10).
 # Version 1.2.0 (2026-10-09): output files are never written through links or over existing files. Each recording is
 #   copied into a private work folder (mktemp -d) and encoded and checked there; when run as root, the recording is read
 #   and the MP3 created, timed and (if asked) the original deleted as the recording's owner, so a link or file planted
@@ -224,12 +227,24 @@ FIND=(find "$DIR" -type f \( "${NAMES[@]}" \) -mmin "+$OLDER")
 [ "$DAYS" -gt 0 ] && FIND+=(-mtime "-$DAYS")
 FIND+=(-printf '%U %G %m %T@\0%p\0') # owner, group, mode and time of the file itself (never of a link target)
 
-# publish SRC DST MODE MTIME: create DST as the owner with exclusive creation (set -C), never over an existing file
-# or link. Exit 0 ok, 3 write/mode/time failed (partial DST removed), anything else: DST already existed (untouched).
+# publish SRC DST MODE MTIME: as the owner, write the complete MP3 to a new hidden file next to DST (mktemp: a fresh,
+# exclusively created name), set its mode and time, then hard-link it to DST and drop the temporary name. link() never
+# replaces anything: it fails if DST exists, even as a dangling link. A run killed half-way therefore leaves only a hidden
+# .NAME.mp3.XXXXXX.part file (removed by a later run after 30 minutes), never a partial DST that later runs would skip.
+# Exit 0 ok, 3 write/mode/time/link failed (nothing left at DST), 4 DST already existed or appeared (untouched).
 publish() {
-  as_owner sh -c 'set -C; umask 077; exec 3>"$1" || exit 4
-    cat >&3 && exec 3>&- && chmod "$2" -- "$1" && touch -d "@$3" -- "$1" || { rm -f -- "$1"; exit 3; }' \
+  as_owner sh -c 'umask 077; d=$(dirname -- "$1"); b=$(basename -- "$1")
+    t=$(mktemp -- "$d/.$b.XXXXXX.part" 2>/dev/null) || exit 3
+    if ! { cat >"$t" && chmod "$2" -- "$t" && touch -d "@$3" -- "$t"; }; then rm -f -- "$t"; exit 3; fi
+    if ln -- "$t" "$1" 2>/dev/null; then rm -f -- "$t"; exit 0; fi
+    rm -f -- "$t"; if [ -e "$1" ] || [ -L "$1" ]; then exit 4; fi; exit 3' \
     sh "$2" "$3" "$4" <"$1"
+}
+# Leftovers of an interrupted publish (hidden .NAME.mp3.XXXXXX.part older than 30 minutes) are removed as the owner.
+clean_parts() {
+  local d b; d=$(dirname -- "$1"); b=$(basename -- "$1")
+  case "$b" in *[][*?\\]*) return 0 ;; esac
+  as_owner find "$d" -maxdepth 1 -type f -name ".$b.??????.part" -mmin +30 -delete 2>/dev/null || true
 }
 
 ok=0; skip=0; busy=0; fail=0; before=0; after=0; start=$(date +%s)
@@ -238,6 +253,7 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' f; do
   read -r OU OG mode mt <<<"$meta"; mt=${mt%%.*}
   ext="${f##*.}"; base="${f%.*}"; mp3="$base.mp3"
   if [ -L "$mp3" ]; then echo "WARN: ${mp3#"$DIR"/} is a link, not an MP3: skipped, nothing changed" >&2; skip=$((skip+1)); continue; fi
+  [ "$DRY" = 1 ] || clean_parts "$mp3"
   if [ -e "$mp3" ]; then skip=$((skip+1)); continue; fi
   # Still being written: changed in the last minute (whatever --older-than says) or held open by Asterisk.
   m0=$(stat -c %Y:%s -- "$f" 2>/dev/null) || continue
@@ -260,7 +276,8 @@ while IFS= read -r -d '' meta && IFS= read -r -d '' f; do
   if [ -z "$why" ]; then
     publish "$out" "$mp3" "$mode" "$mt"; rc=$?
     if [ "$rc" = 3 ]; then why="cannot write ${mp3##*/} (or set its mode and time)"
-    elif [ "$rc" != 0 ]; then why="${mp3##*/} appeared while converting and was left untouched"; fi
+    elif [ "$rc" = 4 ]; then why="${mp3##*/} appeared while converting and was left untouched"
+    elif [ "$rc" != 0 ]; then why="writing ${mp3##*/} was interrupted (exit $rc); nothing was left at that name, next run retries"; fi
   fi
   if [ -z "$why" ] && [ "$CDR" = 1 ]; then
     old=$(sql_escape "${f##*/}"); new=$(sql_escape "${mp3##*/}")

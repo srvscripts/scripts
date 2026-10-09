@@ -28,7 +28,7 @@ The latest release of every script, most recently updated first. Each script fol
 | 2026-10-09 | [Block RDP Brute Force on Windows Server: PowerShell Script](rdp-brute-force-blocker/CHANGELOG.md) | 1.0.1 | WhatIf the change log now says "Would block" and nothing is written to the log file. Tested on a Windows Server 2025 DC. |
 | 2026-10-09 | [Backup Verify Script](backup-verify/CHANGELOG.md) | 2.1.2 | Header comment now shows the real version (it still said 2.1.0); no change to checks or output. |
 | 2026-10-09 | [AutoSSL DCV Failures Report](autossl-failure-report/CHANGELOG.md) | 1.0.0 | Initial release |
-| 2026-10-09 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](asterisk-recordings-to-mp3/CHANGELOG.md) | 1.2.0 | Output files are never written through links or over existing files. Each recording is copied into a private work folder (mktemp -d), encoded and verified there |
+| 2026-10-09 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](asterisk-recordings-to-mp3/CHANGELOG.md) | 1.2.1 | A run interrupted while writing an MP3 (killed, server reboot, disk full) could leave a partial MP3 at the final name, and later runs then skipped that recordin |
 | 2026-10-09 | [AD Privileged Group Report: Domain Admins and adminCount Audit](ad-privileged-group-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [AD Nested Group Membership: PowerShell Tree with Loop Detection](ad-nested-group-membership/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [AD Health Check Report: dcdiag and repadmin PowerShell Script](ad-health-check-report/CHANGELOG.md) | 1.0.0 | First release. |
