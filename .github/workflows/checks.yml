@@ -47,6 +47,13 @@ jobs:
           $err = @($r | Where-Object Severity -eq 'Error').Count
           Write-Output "$($files.Count) files, $bad parse errors, $err analyzer errors"
           if ($bad -or $err) { exit 1 }
+      - name: Pester tests (M365 licence preservation decisions, mocked tenant data)
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.5 -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop
+          Import-Module Pester -MinimumVersion 5.5
+          $c = New-PesterConfiguration; $c.Run.Path = 'tests'; $c.Run.Exit = $true; $c.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $c
   regression:
     name: Regression fixtures (known inputs, expected verdicts)
     runs-on: ubuntu-latest

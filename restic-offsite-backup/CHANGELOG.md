@@ -6,6 +6,10 @@ Newest first. Each version is tagged `restic-offsite-backup/vX.Y.Z` in this repo
 
 Tested on: In production since 7 Oct 2026 on the srvScripts.com server (DirectAdmin, MariaDB, SFTP repository on a second server): nightly backup, retention, weekly integrity check, and an isolated restore on a third server with the database imported and row counts and plugin files identical to the live site. 1.2.0 on AlmaLinux 9.8 with cPanel & WHM 11.138, MariaDB 10.11.19 and restic 0.19.1 (lab test, 7 Oct 2026): init, two nightly runs with 4 databases, foreign files in DUMP_DIR kept byte-for-byte, dump restored from the snapshot, retention, integrity check and restore test; 10 safety fixtures (planted .part symlink, name collisions, failed and interrupted dumps); restic 0.16.4 with a local repository and MariaDB 10.11.14 on Ubuntu 24.04 (container): complete backup, database dump restored and imported, retention, restore test, and refusal of an unmarked DUMP_DIR; 1.1.0 safety cases (populated or symlinked DUMP_DIR, system paths, failed dump, restic exit 3, missing path, interruption, dry run) with stub commands.
 
+## 1.2.1
+
+The lock file no longer falls back to /tmp/restic-offsite-backup.lock when /run/lock is missing. Root uses /run/restic-offsite-backup.lock; the file is opened for append (never truncated) and refused if it is a link. Found in an independent review (FRESH-10). CI now also runs database-name collision, foreign-file and cleanup-ownership fixtures.
+
 ## 1.2.0
 
 Each run dumps into its own new DUMP_DIR/run.XXXXXX workspace: dumps are created exclusively (no overwrite, no symlink following) and only that run's own files are deleted, so an unrelated file such as appdb.sql in DUMP_DIR is never overwritten or removed (1.1.0 could). Database names changed by sanitising get a short hash so two databases can never share a file. Found in an external review (PROD7-02).

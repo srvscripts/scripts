@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-09T01:31:35+00:00",
+    "generated": "2026-10-09T01:52:04+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -368,11 +368,11 @@
             "title": "Restic Backup Script for Offsite Backups",
             "file": "restic-offsite-backup.sh",
             "url": "https://scr.srvscripts.com/restic-offsite-backup/restic-offsite-backup.sh",
-            "sha256": "c4304636630e788ccf27a280a19e0fe6bb533f4c6e21f278cefd2df27fa965bc",
+            "sha256": "802f8286b138d1823e41e1338d8076941f1c1b41fbd5c0b1a46e6745e929df3a",
             "page": "https://srvscripts.com/scripts/restic-offsite-backup/",
             "language": "Bash",
-            "version": "1.2.0",
-            "updated": "2026-10-07",
+            "version": "1.2.1",
+            "updated": "2026-10-09",
             "summary": "A restic backup script for cron: dumps every MariaDB/MySQL database, backs up to any restic repository, applies daily/weekly/monthly retention, checks integrity and test-restores a random file."
         },
         {

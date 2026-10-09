@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Restic Backup Script for Offsite Backups (v1.2.0) - from srvScripts.com
+# Restic Backup Script for Offsite Backups (v1.2.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/restic-offsite-backup/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # restic-offsite-backup.sh — cron-safe restic wrapper: MySQL dumps, backup, retention, periodic integrity check
 # https://srvscripts.com/scripts/restic-offsite-backup/   License: MIT
-# Version: 1.2.0
+# Version: 1.2.1
 #
 # Reads /etc/srvscripts/restic.conf (KEY=value lines, never executed), optionally dumps every
 # MariaDB/MySQL database, runs `restic backup`, `restic forget --prune` with your keep policy and,
@@ -22,13 +22,15 @@
 # database dump is missing, or restic could not read every file, retention (forget --prune) is skipped
 # so older complete snapshots are kept; set ALLOW_PARTIAL_PRUNE=yes to override.
 # Exit codes: 0 OK, 1 backup/prune/check/restore problem or another run holds the lock, 2 config error.
+# 1.2.1: lock file: root uses /run/restic-offsite-backup.lock and there is no /tmp fallback any more; the lock
+#        is opened for append (never truncated) and never through a link.
 # 1.2.0: dumps go to a per-run workspace DUMP_DIR/run.XXXXXX, are created exclusively (no overwrite, no
 #        symlink following) and only this run's own files are deleted; sanitised DB file names get a hash.
 set -uo pipefail
 export LC_ALL=C
 unset RESTIC_PASSWORD RESTIC_PASSWORD_COMMAND        # the password comes from RESTIC_PASSWORD_FILE only
 
-SCRIPT_VERSION=1.2.0
+SCRIPT_VERSION=1.2.1
 CONF=/etc/srvscripts/restic.conf; MODE=backup; DRY=0; YES=0; VERBOSE=0
 STATE_DIR=/var/lib/srvscripts; TAG=srvscripts; HOST=$(hostname)
 
@@ -123,9 +125,11 @@ rr() {   # run restic, keep its output in $OUT and the log, show it with --verbo
   return $rc
 }
 confirm() { (( YES )) && return 0; local a; read -r -p "$1 [y/N] " a; [[ "$a" =~ ^[Yy] ]]; }
-LOCKFILE=/run/lock/restic-offsite-backup.lock; [[ -d /run/lock ]] || LOCKFILE=/tmp/restic-offsite-backup.lock
+# Lock file in a directory other users cannot write to (root) and never in /tmp.
+if (( EUID == 0 )); then LOCKFILE=/run/restic-offsite-backup.lock; else LOCKFILE=/run/lock/restic-offsite-backup.lock; fi
 take_lock() {
-  exec 9>"$LOCKFILE" || { echo "Cannot open lock file $LOCKFILE" >&2; exit 2; }
+  [[ -L "$LOCKFILE" ]] && { echo "Lock file $LOCKFILE is a link, refusing to use it" >&2; exit 2; }
+  exec 9>>"$LOCKFILE" || { echo "Cannot open lock file $LOCKFILE (run as root, or make /run/lock writable)" >&2; exit 2; }
   flock -n 9 || { log "ERROR another restic-offsite-backup run is in progress (lock $LOCKFILE)"; exit 1; }
 }
 repo_ok() { restic cat config >/dev/null 2>&1; }

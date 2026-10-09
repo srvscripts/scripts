@@ -28,7 +28,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |
 | [Redirect Chain Checker](https://srvscripts.com/scripts/redirect-tester/) | [`redirect-tester.sh`](redirect-tester/redirect-tester.sh) | 1.0.0 |
-| [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.2.0 |
+| [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.2.1 |
 | [Server Inventory Report](https://srvscripts.com/scripts/server-inventory-report/) | [`server-inventory-report.sh`](server-inventory-report/server-inventory-report.sh) | 1.0.1 |
 | [Server Security Audit Script](https://srvscripts.com/scripts/server-security-audit/) | [`server-security-audit.sh`](server-security-audit/server-security-audit.sh) | 2.3.0 |
 | [SSL Expiry Check Script: Free Network Test for Web and Mail](https://srvscripts.com/scripts/ssl-expiry-check/) | [`ssl-expiry-check.sh`](ssl-expiry-check/ssl-expiry-check.sh) | 1.1.0 |

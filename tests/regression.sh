@@ -102,6 +102,60 @@ if command -v restic >/dev/null && [[ $EUID -eq 0 ]]; then
   run "restic-offsite-backup: wrong password fails" "*" "FAIL|wrong password" -- bash "$(S restic-offsite-backup)" --list --config "$R/conf"
 else skp "restic-offsite-backup (needs restic and root)"; fi
 
+# ---- server-security-audit: firewall rule order (fake iptables/nft; the real firewall is never read or changed) ----
+FW=$T/fw; mkdir -p "$FW/bin"
+printf '%s\n' '#!/bin/bash' '[ "${FAKE_IPT_FAIL:-}" = 1 ] && { echo "Permission denied (you must be root)" >&2; exit 4; }' '[ "$1" = -S ] && cat "$FAKE_IPT"; exit 0' > "$FW/bin/iptables"
+printf '%s\n' '#!/bin/bash' 'exit 0' > "$FW/bin/ip6tables"
+printf '%s\n' '#!/bin/bash' '[ "$1 $2" = "list ruleset" ] && exit 0; exit 0' > "$FW/bin/nft"
+for x in firewall-cmd ufw csf; do printf '%s\n' '#!/bin/bash' 'exit 1' > "$FW/bin/$x"; done
+chmod 755 "$FW"/bin/*
+fw(){ local name=$1 want=$2; shift 2; printf '%s\n' "$@" > "$FW/rules.$RANDOM" ; local f; f=$(ls -t "$FW"/rules.* | head -1)
+  run "server-security-audit firewall: $name" "*" "$want" -- env PATH="$FW/bin:$PATH" FAKE_IPT="$f" bash "$(S server-security-audit)" --no-color; }
+fw "catch-all DROP policy with specific ACCEPTs passes" "PASS.*INPUT filtering verified" \
+  "-P INPUT DROP" "-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT" "-A INPUT -p tcp --dport 22 -j ACCEPT"
+fw "conditional ACCEPT then catch-all DROP passes" "PASS.*INPUT filtering verified" \
+  "-P INPUT ACCEPT" "-A INPUT -p tcp --dport 443 -j ACCEPT" "-A INPUT -j DROP"
+fw "ACCEPT-all before DROP is a warning" "WARN.*accepts all traffic before any DROP" \
+  "-P INPUT ACCEPT" "-A INPUT -j ACCEPT" "-A INPUT -j DROP"
+fw "ACCEPT-all before DROP never passes" "!PASS.*INPUT filtering verified" \
+  "-P INPUT ACCEPT" "-A INPUT -j ACCEPT" "-A INPUT -j DROP"
+fw "DROP after a conditional ACCEPT only is unverified" "WARN.*UNVERIFIED" \
+  "-P INPUT ACCEPT" "-A INPUT -s 10.0.0.0/8 -j ACCEPT" "-A INPUT -s 10.1.2.3/32 -j DROP"
+fw "ban-only rules with ACCEPT policy are a warning" "WARN.*No catch-all DROP" \
+  "-P INPUT ACCEPT" "-N f2b-sshd" "-A INPUT -p tcp --dport 22 -j f2b-sshd" "-A f2b-sshd -s 203.0.113.5/32 -j REJECT" "-A f2b-sshd -j RETURN"
+fw "jump to a chain ending in DROP passes" "PASS.*INPUT filtering verified" \
+  "-P INPUT ACCEPT" "-N LOCALINPUT" "-A INPUT -j LOCALINPUT" "-A LOCALINPUT -p tcp --dport 22 -j ACCEPT" "-A LOCALINPUT -j DROP"
+run "server-security-audit firewall: unreadable rules are never a PASS" "*" "!PASS.*INPUT filtering verified" -- env PATH="$FW/bin:$PATH" FAKE_IPT=/dev/null FAKE_IPT_FAIL=1 bash "$(S server-security-audit)" --no-color
+
+# ---- restic-offsite-backup: database-name collisions, foreign files and links, cleanup ownership (fake client/dumper) ----
+if command -v restic >/dev/null && [[ $EUID -eq 0 ]]; then
+  Q=$T/rq; FK2=$Q/bin; mkdir -p "$FK2" "$Q/data" "$Q/dump"; echo data > "$Q/data/f.txt"; printf SENTINEL > "$Q/sentinel"; chmod 600 "$Q/sentinel"
+  printf '%s\n' '#!/bin/bash' 'printf "%s\n" shop "a b" "a?b" a_b broken' > "$FK2/mariadb"
+  printf '%s\n' '#!/bin/bash' 'db="${*: -1}"; echo "-- dump of $db"; echo "CREATE TABLE t (i INT);"; [ "$db" != broken ]' > "$FK2/mariadb-dump"
+  chmod 755 "$FK2"/*
+  echo "test-only-password-$RANDOM" > "$Q/pw"; chmod 600 "$Q/pw"
+  printf 'RESTIC_REPOSITORY=%s\nRESTIC_PASSWORD_FILE=%s\nRESTIC_CACHE_DIR=%s\nBACKUP_PATHS="%s"\nMYSQL_DUMP=yes\nDUMP_DIR=%s\nLOG_FILE=%s\n' \
+    "$Q/repo" "$Q/pw" "$Q/cache" "$Q/data" "$Q/dump" "$Q/log" > "$Q/conf"; chmod 600 "$Q/conf"
+  RQ=(env PATH="$FK2:$PATH" bash "$(S restic-offsite-backup)" --config "$Q/conf")
+  run "restic fixtures: --init" 0 "" -- "${RQ[@]}" --init --yes
+  # an earlier run's workspace: marker lists a dump that is now a link to the sentinel; a foreign dir has no marker
+  chk(){ if eval "$2"; then ok "$1"; else bad "$1" "$Q/log"; fi; }
+  run "restic fixtures: a failed dump makes the run fail" 1 "" -- "${RQ[@]}"
+  ls_snap(){ env RESTIC_REPOSITORY="$Q/repo" RESTIC_PASSWORD_FILE="$Q/pw" RESTIC_CACHE_DIR="$Q/cache" restic ls latest 2>/dev/null | grep '\.sql$' | sed 's#.*/##' | sort; }
+  chk "restic fixtures: 'a b' and 'a?b' get separate hashed dump files" '[[ $(ls_snap | grep -c "^a_b-[0-9a-f]\{8\}\.sql$") == 2 ]] && ls_snap | grep -qx a_b.sql && ls_snap | grep -qx shop.sql'
+  chk "restic fixtures: failed dump is reported and not saved" '! ls_snap | grep -q broken && grep -q "dump of database .broken. failed" "$Q/log"'
+  chk "restic fixtures: retention skipped after a failed dump" 'grep -q "retention skipped" "$Q/log"'
+  # now plant foreign files, a link, an interrupted run whose listed dump became a link, and a workspace with no marker
+  old=$Q/dump/run.QwErTy; mkdir -p "$old"; printf 'header\nlinked.sql\n' > "$old/.srvscripts-restic-run"; ln -s "$Q/sentinel" "$old/linked.sql"
+  mkdir -p "$Q/dump/run.ABCDEF"; printf FOREIGN > "$Q/dump/run.ABCDEF/keep.sql"
+  printf OTHER > "$Q/dump/foreign.sql"; ln -s "$Q/sentinel" "$Q/dump/evil.sql"; : > "$Q/log"
+  run "restic fixtures: second run with planted files" 1 "" -- "${RQ[@]}"
+  chk "restic fixtures: foreign files and links in DUMP_DIR unchanged" '[[ $(cat "$Q/dump/foreign.sql") == OTHER && -L $Q/dump/evil.sql && $(cat "$Q/sentinel") == SENTINEL ]]'
+  chk "restic fixtures: workspace without a run marker left alone" '[[ $(cat "$Q/dump/run.ABCDEF/keep.sql") == FOREIGN ]] && grep -q "run.ABCDEF has no run marker" "$Q/log"'
+  chk "restic fixtures: listed dump that became a link is neither followed nor deleted" '[[ $(cat "$Q/sentinel") == SENTINEL && -L $old/linked.sql ]]'
+  chk "restic fixtures: second run still dumps the good databases" 'grep -q "dumped 4 of 5 database" "$Q/log"'
+else skp "restic-offsite-backup fixtures (need restic and root)"; fi
+
 # ---- asterisk-recordings-to-mp3: links, collisions and call-log failures never change other files or lose originals ----
 # Fake ffmpeg/ffprobe/mysql in PATH; recordings belong to uid 65534 like a tenant-owned spool. Runs as root (CI does).
 if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
