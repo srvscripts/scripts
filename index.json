@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-09T01:52:04+00:00",
+    "generated": "2026-10-09T06:17:01+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -24,7 +24,7 @@
             "page": "https://srvscripts.com/scripts/ad-change-audit-reporter/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Read-only PowerShell report of Active Directory changes: who changed which user, group or computer, old and new values, and the source workstation when the logs allow it."
         },
         {
@@ -36,7 +36,7 @@
             "page": "https://srvscripts.com/scripts/ad-health-check-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that runs dcdiag, repadmin /replsummary, w32tm and SYSVOL DFSR checks on every DC and saves a colour-coded HTML report."
         },
         {
@@ -48,7 +48,7 @@
             "page": "https://srvscripts.com/scripts/ad-nested-group-membership/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that shows the full nested group membership tree of an AD user or group, with paths, primary group and loop detection."
         },
         {
@@ -60,7 +60,7 @@
             "page": "https://srvscripts.com/scripts/ad-privileged-group-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that reports every direct and nested member of Domain Admins and other privileged AD groups, plus adminCount=1 orphans."
         },
         {
@@ -84,7 +84,7 @@
             "page": "https://srvscripts.com/scripts/autossl-failure-report/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "Lists AutoSSL DCV failures on a cPanel server grouped by cause (DNS elsewhere, CAA, rate limit, blocked /.well-known/) and every installed certificate that expires within 14 days."
         },
         {
@@ -96,7 +96,7 @@
             "page": "https://srvscripts.com/scripts/backup-verify/",
             "language": "Bash",
             "version": "2.1.2",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "A backup verify script that checks every account and database series: fresh, not shrinking, opens cleanly, and present for every expected account. Anything it cannot test is a failure."
         },
         {
@@ -168,7 +168,7 @@
             "page": "https://srvscripts.com/scripts/entra-inactive-users-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that lists inactive Microsoft Entra ID users from signInActivity, with guests, licensed-only and never-signed-in filters and CSV output."
         },
         {
@@ -180,7 +180,7 @@
             "page": "https://srvscripts.com/scripts/exo-mailbox-permissions-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that exports FullAccess, SendAs and SendOnBehalf permissions for all Exchange Online mailboxes to CSV, using the EXO V3 cmdlets."
         },
         {
@@ -192,7 +192,7 @@
             "page": "https://srvscripts.com/scripts/exo-message-trace-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script for Exchange Online message trace with Get-MessageTraceV2: 10-day slicing, 5,000-row continuation, throttle handling and CSV export."
         },
         {
@@ -204,7 +204,7 @@
             "page": "https://srvscripts.com/scripts/exim-mail-queue-report/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "Find out what is filling the Exim queue on a cPanel server: top senders, recipient domains, authenticated users, sending scripts and delivery errors from the last 24 hours, with an optional frozen-message purge."
         },
         {
@@ -216,7 +216,7 @@
             "page": "https://srvscripts.com/scripts/export-ad-users-csv/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that exports Active Directory users to CSV or HTML with last logon, password age, manager, department and OU."
         },
         {
@@ -228,7 +228,7 @@
             "page": "https://srvscripts.com/scripts/inactive-ad-accounts-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that reports AD users and computers inactive for N days (lastLogonTimestamp), with never-logged-on detection and a safe -WhatIf disable."
         },
         {
@@ -240,7 +240,7 @@
             "page": "https://srvscripts.com/scripts/inode-usage-report/",
             "language": "Bash",
             "version": "1.1.0",
-            "updated": "2026-10-07",
+            "updated": "2026-10-09",
             "summary": "Free bash script that reports inode usage per cPanel or DirectAdmin account, flags accounts over thresholds and lists the folders holding the most files."
         },
         {
@@ -252,7 +252,7 @@
             "page": "https://srvscripts.com/scripts/intune-device-compliance-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that exports Intune managed devices with compliance state, OS, last sync, user and encryption from Microsoft Graph to CSV or HTML."
         },
         {
@@ -276,7 +276,7 @@
             "page": "https://srvscripts.com/scripts/ad-locked-out-users-report/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-06",
+            "updated": "2026-10-09",
             "summary": "Free PowerShell script that lists locked-out AD users, reads event 4740 on the PDC emulator for the caller computer, and can unlock safely with -WhatIf."
         },
         {
@@ -324,7 +324,7 @@
             "page": "https://srvscripts.com/scripts/mysql-health-snapshot/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "One page of the numbers that matter on a MariaDB or MySQL server: connections vs limit, buffer pool hit ratio, tmp tables on disk, slow queries, largest tables, leftover MyISAM and anything running longer than five seconds. Read-only."
         },
         {
@@ -348,7 +348,7 @@
             "page": "https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "Turns a PHP-FPM slow log into answers: slow requests grouped by script, stack frame, function and WordPress plugin, plus pm.max_children hits and timeouts per pool next to each pool's settings."
         },
         {

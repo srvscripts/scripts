@@ -4,7 +4,7 @@ File: `asterisk-recordings-to-mp3.sh`. Page: <https://srvscripts.com/scripts/ast
 
 Newest first. Each version is tagged `asterisk-recordings-to-mp3/vX.Y.Z` in this repository.
 
-Tested on: 1.1.0 on Debian 12 with FreePBX 17 and Asterisk 22.11 (lab test, 7 Oct 2026): wav and gsm converted with --delete-original --update-cdr and the call log updated; a recording with no call-log row kept its original (exit 1); unreadable CDR database stops before any change; 16 failure fixtures (CDR error/0 rows, zero-length and truncated MP3, rename/owner/time failures, open files); Debian 12 with FreePBX 17.0 and Asterisk 22.11 (lab test with real MixMonitor recordings, 6 Oct 2026); Ubuntu 24.04 with ffmpeg 6.1, SoX 14.4.2 and LAME 3.100, sample Asterisk recordings (wav, WAV49, gsm, ulaw, sln16)
+Tested on: 1.2.0 on Debian 12 with FreePBX 17 and Asterisk 22.11 (lab test, 9 Oct 2026): wav and gsm recordings converted as root with ffmpeg and with sox+lame (MP3s owned by asterisk, original time kept); a planted .mp3.part link to a root-only test file and a dangling link at the final MP3 name left the test file unchanged and created nothing at the link target. 18 stand-in-program regression checks run in CI before every release (1.1.0 fails them). Version 1.1.0 was tested on the same server on 7 Oct 2026.
 
 ## 1.2.0
 
