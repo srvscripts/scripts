@@ -4,6 +4,9 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
+| 2026-10-09 | [cPanel PHP Version Audit](cpanel-php-version-audit/CHANGELOG.md) | 1.0.0 | Initial release |
+| 2026-10-09 | [cPanel Disk Usage Report](cpanel-disk-usage-report/CHANGELOG.md) | 1.0.0 | Initial release |
+| 2026-10-09 | [cPanel Account Inventory](cpanel-account-inventory/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [WordPress Version Audit: Find Every WordPress Site and Its Version](wordpress-version-audit/CHANGELOG.md) | 1.1.0 | Status words now say what is checked: MINIMUM-MET / BELOW-MINIMUM (against 7.0.3 for CVE-2026-64638 by default) instead of OK / OUTDATED; the threshold and advi |
 | 2026-10-09 | [Secure Boot 2023 Certificate Check: PowerShell Script for Many PCs](secure-boot-cert-check/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [Restic Backup Script for Offsite Backups](restic-offsite-backup/CHANGELOG.md) | 1.2.1 | The lock file no longer falls back to /tmp/restic-offsite-backup.lock when /run/lock is missing. Root uses /run/restic-offsite-backup.lock; the file is opened f |
@@ -33,9 +36,6 @@ The latest release of every script, most recently updated first. Each script fol
 | 2026-10-07 | [Server Security Audit Script](server-security-audit/CHANGELOG.md) | 2.3.0 | Firewall check is stricter: PASS only when the INPUT path ends in a catch-all DROP/REJECT (policy or final rule). A DROP that comes after a conditional ACCEPT i |
 | 2026-10-06 | [Server Inventory Report](server-inventory-report/CHANGELOG.md) | 1.0.1 | ImunifyAV is reported as ImunifyAV (malware scanner only) instead of Imunify360; process titles with spaces, such as cpsrvd (SSL), are shortened to the program  |
 | 2026-10-06 | [Redirect Chain Checker](redirect-tester/CHANGELOG.md) | 1.0.0 | Initial release |
-| 2026-10-05 | [cPanel PHP Version Audit](cpanel-php-version-audit/CHANGELOG.md) | 1.0.0 | Initial release |
-| 2026-10-05 | [cPanel Disk Usage Report](cpanel-disk-usage-report/CHANGELOG.md) | 1.0.0 | Initial release |
-| 2026-10-05 | [cPanel Account Inventory](cpanel-account-inventory/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-05 | [SSL Expiry Check Script: Free Network Test for Web and Mail](ssl-expiry-check/CHANGELOG.md) | 1.1.0 | Also verifies the certificate chain and host name: self-signed, untrusted, incomplete-chain and wrong-host certificates are now reported as BAD (previously only |
 | 2026-10-05 | [MariaDB Slow Query Log Summary](mariadb-slow-query-summary/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-05 | [Disk and Inode Alert](disk-inode-alert/CHANGELOG.md) | 1.0.0 | Initial release |

@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-09T06:20:42+00:00",
+    "generated": "2026-10-09T07:57:28+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -120,7 +120,7 @@
             "page": "https://srvscripts.com/scripts/cpanel-account-inventory/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "A cPanel account inventory in one command: domain, addon and parked counts, IP, package, owner, disk, inodes, mailboxes, databases, PHP version, creation date and suspension for every account."
         },
         {
@@ -132,7 +132,7 @@
             "page": "https://srvscripts.com/scripts/cpanel-disk-usage-report/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "Per-account disk usage on a cPanel/WHM server, split into files, mail and MySQL, sorted by total and compared to quota. Table or CSV output. Read-only."
         },
         {
@@ -144,7 +144,7 @@
             "page": "https://srvscripts.com/scripts/cpanel-php-version-audit/",
             "language": "Bash",
             "version": "1.0.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-09",
             "summary": "A cPanel PHP version audit for EasyApache 4 MultiPHP: every domain's PHP version, a count per version, and a list of sites still running end-of-life PHP. Optional CSV export."
         },
         {
