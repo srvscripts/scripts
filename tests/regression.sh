@@ -218,5 +218,27 @@ if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
   chk "asterisk: refused recording kept, nothing written" '[[ -f $R4/rootrec.wav && ! -e $R4/rootrec.mp3 ]]'
 else skp "asterisk-recordings-to-mp3 fixtures (need root and setpriv)"; fi
 
+# ---- process-hog-report: a known busy process owned by a known user must be named in the report ----
+PH=$(S process-hog-report)
+run "process-hog-report: --interval=0 is refused" 2 "1-300" -- bash "$PH" --interval=0
+run "process-hog-report: unknown option is refused" 2 "Unknown option" -- bash "$PH" --bogus
+run "process-hog-report: --if-load above the current load prints nothing" 0 "!Process hog report" -- bash "$PH" --if-load=99999
+if [[ $(id -u) -eq 0 ]] && command -v setpriv >/dev/null; then
+  HD=$(mktemp -d /tmp/phr-fixture.XXXXXX); chmod 755 "$HD"; cp "$(command -v yes)" "$HD/srvshogfixture"; chmod 755 "$HD/srvshogfixture"
+  HU=$(getent passwd 65534 | cut -d: -f1)
+  setpriv --reuid=65534 --regid=65534 --clear-groups "$HD/srvshogfixture" >/dev/null 2>&1 & HPID=$!
+  sleep 0.5
+  PO=$T/phr.out; bash "$PH" --interval=2 --top=5 --no-color > "$PO" 2>&1; prc=$?
+  [[ $prc -eq 0 ]] && grep -q "^Process hog report" "$PO" && ok "process-hog-report: report runs and exits 0" || bad "process-hog-report: report runs and exits 0 (exit $prc)" "$PO"
+  awk '/^Top processes by CPU/{f=1;next} /^$/{f=0} f' "$PO" | grep -Eq "^ *$HPID +$HU +[0-9.]+ .*srvshogfixture" \
+    && ok "process-hog-report: the busy process is listed with its PID, user and name" || bad "process-hog-report: the busy process is listed with its PID, user and name" "$PO"
+  awk -v u="$HU" '/^Accounts \/ users by CPU/{f=1;next} /^$/{f=0} f && $1==u && $2+0 >= 50 {hit=1} END{exit !hit}' "$PO" \
+    && ok "process-hog-report: its account shows at least 50% of one core" || bad "process-hog-report: its account shows at least 50% of one core" "$PO"
+  PU=$T/phr-user.out; bash "$PH" --interval=1 --user="$HU" --no-color > "$PU" 2>&1
+  awk '/^Top processes by CPU/{f=1;getline;next} /^$/{f=0} f && NF' "$PU" | awk -v u="$HU" '$2!=u {bad=1} END{exit bad}' && grep -q srvshogfixture "$PU" \
+    && ok "process-hog-report: --user shows only that account" || bad "process-hog-report: --user shows only that account" "$PU"
+  kill "$HPID" 2>/dev/null; wait "$HPID" 2>/dev/null; rm -rf "$HD"
+else skp "process-hog-report busy-process fixtures (need root and setpriv)"; fi
+
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))
