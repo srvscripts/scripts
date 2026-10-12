@@ -27,6 +27,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [MariaDB Slow Query Log Summary](https://srvscripts.com/scripts/mariadb-slow-query-summary/) | [`mariadb-slow-query-summary.sh`](mariadb-slow-query-summary/mariadb-slow-query-summary.sh) | 1.0.0 |
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |
+| [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](https://srvscripts.com/scripts/process-hog-report/) | [`process-hog-report.sh`](process-hog-report/process-hog-report.sh) | 1.0.0 |
 | [Redirect Chain Checker](https://srvscripts.com/scripts/redirect-tester/) | [`redirect-tester.sh`](redirect-tester/redirect-tester.sh) | 1.0.0 |
 | [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.2.1 |
 | [Server Inventory Report](https://srvscripts.com/scripts/server-inventory-report/) | [`server-inventory-report.sh`](server-inventory-report/server-inventory-report.sh) | 1.0.1 |

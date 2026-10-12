@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-11T22:46:02+00:00",
+    "generated": "2026-10-12T22:34:06+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -350,6 +350,18 @@
             "version": "1.0.0",
             "updated": "2026-10-09",
             "summary": "Turns a PHP-FPM slow log into answers: slow requests grouped by script, stack frame, function and WordPress plugin, plus pm.max_children hits and timeouts per pool next to each pool's settings."
+        },
+        {
+            "slug": "process-hog-report",
+            "title": "Process Hog Report: Which Account Is Using the CPU, RAM and Disk",
+            "file": "process-hog-report.sh",
+            "url": "https://scr.srvscripts.com/process-hog-report/process-hog-report.sh",
+            "sha256": "b4f43010608bf1a94c5a16bcc478dd060d4d8bf220998bc47e0e6a963b383994",
+            "page": "https://srvscripts.com/scripts/process-hog-report/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-11",
+            "summary": "A read-only Bash script that samples /proc twice and shows which accounts and processes are using the CPU, memory and disk, with each account's domain on cPanel and DirectAdmin, the I/O wait, stuck processes, and a cron mode that only reports when the load is high."
         },
         {
             "slug": "redirect-tester",

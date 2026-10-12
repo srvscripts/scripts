@@ -4,6 +4,7 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
+| 2026-10-11 | [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](process-hog-report/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel PHP Version Audit](cpanel-php-version-audit/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel Disk Usage Report](cpanel-disk-usage-report/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel Account Inventory](cpanel-account-inventory/CHANGELOG.md) | 1.0.0 | Initial release |
