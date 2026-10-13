@@ -4,13 +4,13 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
+| 2026-10-13 | [Restic Backup Script for Offsite Backups](restic-offsite-backup/CHANGELOG.md) | 1.3.0 | RETENTION=no for append-only repositories (rest-server --append-only), where old snapshots are removed on the backup server; RESTIC_REST_USERNAME, RESTIC_REST_P |
 | 2026-10-11 | [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](process-hog-report/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel PHP Version Audit](cpanel-php-version-audit/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel Disk Usage Report](cpanel-disk-usage-report/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel Account Inventory](cpanel-account-inventory/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [WordPress Version Audit: Find Every WordPress Site and Its Version](wordpress-version-audit/CHANGELOG.md) | 1.1.0 | Status words now say what is checked: MINIMUM-MET / BELOW-MINIMUM (against 7.0.3 for CVE-2026-64638 by default) instead of OK / OUTDATED; the threshold and advi |
 | 2026-10-09 | [Secure Boot 2023 Certificate Check: PowerShell Script for Many PCs](secure-boot-cert-check/CHANGELOG.md) | 1.0.0 | First release. |
-| 2026-10-09 | [Restic Backup Script for Offsite Backups](restic-offsite-backup/CHANGELOG.md) | 1.2.1 | The lock file no longer falls back to /tmp/restic-offsite-backup.lock when /run/lock is missing. Root uses /run/restic-offsite-backup.lock; the file is opened f |
 | 2026-10-09 | [PHP-FPM Slow Log Analyzer](php-fpm-slowlog-analyzer/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [NTFS Permissions Report to CSV: PowerShell Folder ACL Script](ntfs-permissions-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](mysql-health-snapshot/CHANGELOG.md) | 1.0.0 | Initial release |

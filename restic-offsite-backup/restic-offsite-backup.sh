@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Restic Backup Script for Offsite Backups (v1.2.1) - from srvScripts.com
+# Restic Backup Script for Offsite Backups (v1.3.0) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/restic-offsite-backup/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # restic-offsite-backup.sh — cron-safe restic wrapper: MySQL dumps, backup, retention, periodic integrity check
 # https://srvscripts.com/scripts/restic-offsite-backup/   License: MIT
-# Version: 1.2.1
+# Version: 1.3.0
 #
 # Reads /etc/srvscripts/restic.conf (KEY=value lines, never executed), optionally dumps every
 # MariaDB/MySQL database, runs `restic backup`, `restic forget --prune` with your keep policy and,
@@ -22,6 +22,9 @@
 # database dump is missing, or restic could not read every file, retention (forget --prune) is skipped
 # so older complete snapshots are kept; set ALLOW_PARTIAL_PRUNE=yes to override.
 # Exit codes: 0 OK, 1 backup/prune/check/restore problem or another run holds the lock, 2 config error.
+# 1.3.0: RETENTION=no for append-only repositories (rest-server --append-only), where old snapshots are
+#        removed on the backup server itself; RESTIC_REST_USERNAME, RESTIC_REST_PASSWORD and RESTIC_CACERT config
+#        keys; a user:password@ in RESTIC_REPOSITORY is masked in the log and on screen.
 # 1.2.1: lock file: root uses /run/restic-offsite-backup.lock and there is no /tmp fallback any more; the lock
 #        is opened for append (never truncated) and never through a link.
 # 1.2.0: dumps go to a per-run workspace DUMP_DIR/run.XXXXXX, are created exclusively (no overwrite, no
@@ -30,7 +33,7 @@ set -uo pipefail
 export LC_ALL=C
 unset RESTIC_PASSWORD RESTIC_PASSWORD_COMMAND        # the password comes from RESTIC_PASSWORD_FILE only
 
-SCRIPT_VERSION=1.2.1
+SCRIPT_VERSION=1.3.0
 CONF=/etc/srvscripts/restic.conf; MODE=backup; DRY=0; YES=0; VERBOSE=0
 STATE_DIR=/var/lib/srvscripts; TAG=srvscripts; HOST=$(hostname)
 
@@ -71,9 +74,9 @@ command -v flock >/dev/null || { echo "flock not installed (util-linux)" >&2; ex
 # ---- config: parsed as data, never sourced -----------------------------------------------------
 declare -A CFG=([KEEP_DAILY]=7 [KEEP_WEEKLY]=4 [KEEP_MONTHLY]=6 [CHECK_EVERY_DAYS]=7 [CHECK_SUBSET]=5%
                 [MYSQL_DUMP]=no [DUMP_DIR]=/var/backups/restic-mysql [LOG_FILE]=/var/log/restic-offsite-backup.log
-                [ALLOW_PARTIAL_PRUNE]=no)
-SCRIPT_KEYS=" BACKUP_PATHS EXCLUDES EXCLUDE_FILE KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY MYSQL_DUMP MYSQL_ARGS DUMP_DIR ALLOW_PARTIAL_PRUNE CHECK_EVERY_DAYS CHECK_SUBSET LOG_FILE LIMIT_UPLOAD "
-ENV_KEYS=" RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_CACHE_DIR RESTIC_COMPRESSION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION B2_ACCOUNT_ID B2_ACCOUNT_KEY AZURE_ACCOUNT_NAME AZURE_ACCOUNT_KEY GOOGLE_PROJECT_ID GOOGLE_APPLICATION_CREDENTIALS "
+                [ALLOW_PARTIAL_PRUNE]=no [RETENTION]=yes)
+SCRIPT_KEYS=" BACKUP_PATHS EXCLUDES EXCLUDE_FILE KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY MYSQL_DUMP MYSQL_ARGS DUMP_DIR ALLOW_PARTIAL_PRUNE RETENTION CHECK_EVERY_DAYS CHECK_SUBSET LOG_FILE LIMIT_UPLOAD "
+ENV_KEYS=" RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RESTIC_REST_USERNAME RESTIC_REST_PASSWORD RESTIC_CACERT RESTIC_CACHE_DIR RESTIC_COMPRESSION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_DEFAULT_REGION B2_ACCOUNT_ID B2_ACCOUNT_KEY AZURE_ACCOUNT_NAME AZURE_ACCOUNT_KEY GOOGLE_PROJECT_ID GOOGLE_APPLICATION_CREDENTIALS "
 [[ -r "$CONF" ]] || { echo "Cannot read config $CONF (see --help and the example on the script page)" >&2; exit 2; }
 while IFS= read -r line || [[ -n "$line" ]]; do
   [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
@@ -94,6 +97,8 @@ LOG=${CFG[LOG_FILE]}
 for k in KEEP_DAILY KEEP_WEEKLY KEEP_MONTHLY CHECK_EVERY_DAYS; do
   [[ "${CFG[$k]}" =~ ^[0-9]+$ ]] || { echo "config: $k must be a number" >&2; exit 2; }
 done
+[[ "${CFG[RETENTION],,}" =~ ^(yes|no)$ ]] || { echo "config: RETENTION must be yes or no" >&2; exit 2; }
+REPO_SHOWN=$(printf '%s' "$RESTIC_REPOSITORY" | sed -E 's#(://)[^/@]*@#\1***@#')   # never log a password from the URL
 perm_warn() { local m; m=$(stat -c '%a' "$1" 2>/dev/null) || return; (( 8#$m & 8#044 )) && echo "WARN: $1 is readable by other users (mode $m); chmod 600 it" >&2; }
 perm_warn "$RESTIC_PASSWORD_FILE"; perm_warn "$CONF"
 
@@ -137,9 +142,9 @@ repo_ok() { restic cat config >/dev/null 2>&1; }
 # ---- modes ---------------------------------------------------------------------------------------------
 do_init() {
   take_lock
-  if repo_ok; then echo "Repository already initialised: $RESTIC_REPOSITORY"; return 0; fi
-  confirm "Create a new restic repository at $RESTIC_REPOSITORY?" || { echo "Aborted."; return 1; }
-  if rr init; then log "OK repository created at $RESTIC_REPOSITORY"; echo "Keep a copy of $RESTIC_PASSWORD_FILE somewhere else: without it the backups cannot be read."
+  if repo_ok; then echo "Repository already initialised: $REPO_SHOWN"; return 0; fi
+  confirm "Create a new restic repository at $REPO_SHOWN?" || { echo "Aborted."; return 1; }
+  if rr init; then log "OK repository created at $REPO_SHOWN"; echo "Keep a copy of $RESTIC_PASSWORD_FILE somewhere else: without it the backups cannot be read."
   else log "FAIL restic init (see $LOG)"; tail -3 "$OUT"; return 1; fi
 }
 
@@ -246,7 +251,7 @@ do_backup() {
   local -a all=() paths=() excl=() args=() keep=()
   take_lock
   [[ $EUID -eq 0 ]] || log "WARN not running as root: files other users own may be skipped"
-  repo_ok || { log "FAIL cannot open repository $RESTIC_REPOSITORY (wrong password, no network, or run --init first)"; return 1; }
+  repo_ok || { log "FAIL cannot open repository $REPO_SHOWN (wrong password, no network, or run --init first)"; return 1; }
   (( DRY )) || rr unlock      # removes only stale locks left by a killed restic; a live one is kept
   read -ra all <<< "${CFG[BACKUP_PATHS]:-}"
   for p in "${all[@]}"; do
@@ -266,7 +271,7 @@ do_backup() {
   [[ "${CFG[MYSQL_DUMP],,}" =~ ^(yes|1|true)$ ]] && args+=(--exclude-if-present "$RUN_FLAG")   # skips workspaces of killed runs
   (( DRY )) && args+=(--dry-run -v)
   (( status )) && args+=(--tag incomplete)     # visible in --list; such a snapshot never triggers pruning
-  log "INFO backup of ${paths[*]} to $RESTIC_REPOSITORY$( (( DRY )) && echo ' (dry run)')"
+  log "INFO backup of ${paths[*]} to $REPO_SHOWN$( (( DRY )) && echo ' (dry run)')"
   rr "${args[@]}" "${paths[@]}"; rc=$?
   case $rc in
     0) log "OK $(grep -E '^(snapshot .* saved|Added to the repository|Would add to the repository)' "$OUT" | tr '\n' ' ')" ;;
@@ -276,12 +281,14 @@ do_backup() {
 
   partial=$status
   keep=(--keep-daily "${CFG[KEEP_DAILY]}" --keep-weekly "${CFG[KEEP_WEEKLY]}" --keep-monthly "${CFG[KEEP_MONTHLY]}")
-  if (( DRY )); then
+  if [[ "${CFG[RETENTION],,}" == no ]]; then
+    log "INFO retention skipped: RETENTION=no (old snapshots are removed on the repository server, e.g. an append-only rest-server)"
+    (( DRY )) && return $status
+  elif (( DRY )); then
     (( partial )) && [[ ! "${CFG[ALLOW_PARTIAL_PRUNE],,}" =~ ^(yes|1|true)$ ]] && log "DRY-RUN this run is incomplete, so a real run would skip retention"
     rr forget --dry-run --host "$HOST" --tag "$TAG" "${keep[@]}"; (( VERBOSE )) || cat "$OUT"
     return $status
-  fi
-  if (( partial )) && [[ ! "${CFG[ALLOW_PARTIAL_PRUNE],,}" =~ ^(yes|1|true)$ ]]; then
+  elif (( partial )) && [[ ! "${CFG[ALLOW_PARTIAL_PRUNE],,}" =~ ^(yes|1|true)$ ]]; then
     log "WARN retention skipped: this run was incomplete (missing path, failed dump or unreadable files), so older snapshots are kept. Fix the cause; the next complete run applies retention."
   elif rr forget --prune --host "$HOST" --tag "$TAG" "${keep[@]}"; then
     log "OK retention applied (daily ${CFG[KEEP_DAILY]}, weekly ${CFG[KEEP_WEEKLY]}, monthly ${CFG[KEEP_MONTHLY]})"

@@ -155,6 +155,27 @@ if command -v restic >/dev/null && [[ $EUID -eq 0 ]]; then
   chk "restic fixtures: listed dump that became a link is neither followed nor deleted" '[[ $(cat "$Q/sentinel") == SENTINEL && -L $old/linked.sql ]]'
   chk "restic fixtures: second run still dumps the good databases" 'grep -q "dumped 4 of 5 database" "$Q/log"'
 else skp "restic-offsite-backup fixtures (need restic and root)"; fi
+# ---- restic-offsite-backup 1.3.0: RETENTION=no keeps every snapshot; credentials in the repository URL never reach the log ----
+if command -v restic >/dev/null; then
+  RN=$T/rn; mkdir -p "$RN/data"; echo one > "$RN/data/a"; head -c 4 /dev/urandom > "$RN/pass"; chmod 600 "$RN/pass"
+  printf '%s\n' "RESTIC_REPOSITORY=$RN/repo" "RESTIC_PASSWORD_FILE=$RN/pass" "BACKUP_PATHS=$RN/data" "KEEP_DAILY=1" "KEEP_WEEKLY=0" "KEEP_MONTHLY=0" "RETENTION=no" "CHECK_EVERY_DAYS=999" "LOG_FILE=$RN/log" > "$RN/conf"; chmod 600 "$RN/conf"
+  RO=$(S restic-offsite-backup)
+  run "restic-offsite-backup: --init (RETENTION=no)" 0 "" -- bash "$RO" --init --yes --config "$RN/conf"
+  for i in 1 2 3; do echo "$i" >> "$RN/data/a"; bash "$RO" --config "$RN/conf" >/dev/null 2>&1; done
+  n=$(RESTIC_PASSWORD_FILE=$RN/pass restic -r "$RN/repo" snapshots --json 2>/dev/null | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')
+  [[ "$n" == 3 ]] && ok "restic-offsite-backup: RETENTION=no keeps all 3 snapshots (KEEP_DAILY=1)" || bad "restic-offsite-backup: RETENTION=no keeps all 3 snapshots (found $n)" "$RN/log"
+  grep -q "retention skipped: RETENTION=no" "$RN/log" && ok "restic-offsite-backup: RETENTION=no is logged" || bad "restic-offsite-backup: RETENTION=no is logged" "$RN/log"
+  sed -i 's/^RETENTION=no$/RETENTION=yes/' "$RN/conf"; echo 4 >> "$RN/data/a"; bash "$RO" --config "$RN/conf" >/dev/null 2>&1
+  n=$(RESTIC_PASSWORD_FILE=$RN/pass restic -r "$RN/repo" snapshots --json 2>/dev/null | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')
+  [[ "$n" == 1 ]] && ok "restic-offsite-backup: RETENTION=yes applies KEEP_DAILY=1" || bad "restic-offsite-backup: RETENTION=yes applies KEEP_DAILY=1 (found $n)" "$RN/log"
+  sed -i 's/^RETENTION=yes$/RETENTION=maybe/' "$RN/conf"
+  run "restic-offsite-backup: an invalid RETENTION value is a config error" 2 "RETENTION must be yes or no" -- bash "$RO" --config "$RN/conf"
+  # A fake restic that fails at once (a real one retries an unreachable server for up to 15 minutes).
+  FB=$T/fakerestic; mkdir -p "$FB"; printf '#!/bin/sh\necho "Fatal: unable to open config file" >&2\nexit 1\n' > "$FB/restic"; chmod +x "$FB/restic"
+  sed -i -e 's/^RETENTION=maybe$/RETENTION=no/' -e "s#^RESTIC_REPOSITORY=.*#RESTIC_REPOSITORY=rest:https://srvs-user:s3cretPW@backup.example.net:8000/repo/#" "$RN/conf"
+  run "restic-offsite-backup: an unreachable rest repository fails cleanly, URL masked" 1 "cannot open repository rest:https://\\*\\*\\*@backup.example.net:8000/repo/" -- env PATH="$FB:$PATH" bash "$RO" --config "$RN/conf"
+  grep -q "s3cretPW" "$RN/log" && bad "restic-offsite-backup: the URL password is not written to the log" "$RN/log" || ok "restic-offsite-backup: the URL password is not written to the log"
+else skp "restic-offsite-backup 1.3.0 fixtures (restic not installed)"; fi
 
 # ---- asterisk-recordings-to-mp3: links, collisions and call-log failures never change other files or lose originals ----
 # Fake ffmpeg/ffprobe/mysql in PATH; recordings belong to uid 65534 like a tenant-owned spool. Runs as root (CI does).
