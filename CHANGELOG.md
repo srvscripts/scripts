@@ -4,6 +4,11 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
+| 2026-10-16 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](voip-toll-fraud-watch/CHANGELOG.md) | 1.0.0 | Initial release |
+| 2026-10-16 | [PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones](pjsip-health-check/CHANGELOG.md) | 1.0.0 | Initial release |
+| 2026-10-16 | [FreePBX Off-Site Backup Script: Databases, Config and Voicemail over rsync](freepbx-offsite-backup/CHANGELOG.md) | 1.0.0 | Initial release |
+| 2026-10-16 | [Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings](recording-retention-cleaner/CHANGELOG.md) | 1.0.0 | Initial release |
+| 2026-10-16 | [Asterisk Security Audit: Check FreePBX for Toll Fraud Risks and Exposed Ports](asterisk-security-audit/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-13 | [Restic Backup Script for Offsite Backups](restic-offsite-backup/CHANGELOG.md) | 1.3.0 | RETENTION=no for append-only repositories (rest-server --append-only), where old snapshots are removed on the backup server; RESTIC_REST_USERNAME, RESTIC_REST_P |
 | 2026-10-11 | [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](process-hog-report/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel PHP Version Audit](cpanel-php-version-audit/CHANGELOG.md) | 1.0.0 | Initial release |

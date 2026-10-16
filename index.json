@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-16T22:46:03+00:00",
+    "generated": "2026-10-16T22:54:34+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -76,6 +76,18 @@
             "summary": "Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, \u00b5-law, SLN) to small mono MP3 files from cron, verifies each file and keeps the FreePBX call log player working."
         },
         {
+            "slug": "asterisk-security-audit",
+            "title": "Asterisk Security Audit: Check FreePBX for Toll Fraud Risks and Exposed Ports",
+            "file": "asterisk-security-audit.sh",
+            "url": "https://scr.srvscripts.com/asterisk-security-audit/asterisk-security-audit.sh",
+            "sha256": "aa83bab4b250953f9316fad7d45b38fa45206b4a1071bee7a2cded72a42cf07f",
+            "page": "https://srvscripts.com/scripts/asterisk-security-audit/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-16",
+            "summary": "A read-only Bash audit for Asterisk and FreePBX that finds the settings behind toll fraud and hijacked PBXs: unsupported versions, public AMI or IAX2, weak SIP passwords, anonymous SIP, trusted IPs in internal contexts, a blind fail2ban jail and unprotected international routes, each with a one-line fix."
+        },
+        {
             "slug": "autossl-failure-report",
             "title": "AutoSSL DCV Failures Report",
             "file": "autossl-failure-report.sh",
@@ -110,6 +122,18 @@
             "version": "1.0.1",
             "updated": "2026-10-09",
             "summary": "Free PowerShell script that reads failed RDP logons (event 4625), counts them per source IP and blocks repeat offenders with Windows Firewall rules, with allow-list and -WhatIf."
+        },
+        {
+            "slug": "recording-retention-cleaner",
+            "title": "Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings",
+            "file": "recording-retention-cleaner.sh",
+            "url": "https://scr.srvscripts.com/recording-retention-cleaner/recording-retention-cleaner.sh",
+            "sha256": "1d1ea355d5d06d46062b2ad598c800dd73754d7a0292ec0729b50ed2085c5e3e",
+            "page": "https://srvscripts.com/scripts/recording-retention-cleaner/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-16",
+            "summary": "A Bash script that enforces a retention period on Asterisk and FreePBX call recordings. It is a dry run by default, can archive old recordings into a verified tar.gz before deleting them, skips calls still being recorded, can stop the FreePBX call log linking to removed files, and can run only when the disk is filling up."
         },
         {
             "slug": "cpanel-account-inventory",
@@ -218,6 +242,18 @@
             "version": "1.0.0",
             "updated": "2026-10-09",
             "summary": "Free PowerShell script that exports Active Directory users to CSV or HTML with last logon, password age, manager, department and OU."
+        },
+        {
+            "slug": "freepbx-offsite-backup",
+            "title": "FreePBX Off-Site Backup Script: Databases, Config and Voicemail over rsync",
+            "file": "freepbx-offsite-backup.sh",
+            "url": "https://scr.srvscripts.com/freepbx-offsite-backup/freepbx-offsite-backup.sh",
+            "sha256": "d835a797a3d34d977b962100ce7cfdc9a5e2739c962c09a06936278e14e555f1",
+            "page": "https://srvscripts.com/scripts/freepbx-offsite-backup/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-16",
+            "summary": "A Bash script that backs up a FreePBX or Asterisk server without the FreePBX Backup module: both databases, the Asterisk internal database, configuration, voicemail, prompts and provisioning files, with checksums, a read-back check, an rsync/SSH copy to another server that is verified, and pruning of old sets."
         },
         {
             "slug": "inactive-ad-accounts-report",
@@ -352,6 +388,18 @@
             "summary": "Turns a PHP-FPM slow log into answers: slow requests grouped by script, stack frame, function and WordPress plugin, plus pm.max_children hits and timeouts per pool next to each pool's settings."
         },
         {
+            "slug": "pjsip-health-check",
+            "title": "PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones",
+            "file": "pjsip-health-check.sh",
+            "url": "https://scr.srvscripts.com/pjsip-health-check/pjsip-health-check.sh",
+            "sha256": "651c7a13a011b0e7b13a80dac05c4dd8ccf3c458d57e645132a80e3889e28255",
+            "page": "https://srvscripts.com/scripts/pjsip-health-check/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-16",
+            "summary": "A read-only Bash script that checks Asterisk and FreePBX PJSIP trunks, outbound registrations, contact round-trip times, phones and active calls, with Nagios-style exit codes, JSON output and mail or webhook alerts when something changes."
+        },
+        {
             "slug": "process-hog-report",
             "title": "Process Hog Report: Which Account Is Using the CPU, RAM and Disk",
             "file": "process-hog-report.sh",
@@ -434,6 +482,18 @@
             "version": "1.1.0",
             "updated": "2026-10-05",
             "summary": "Checks the live TLS certificate on any list of hosts \u2014 web, mail with STARTTLS, or every domain on a cPanel server \u2014 and warns before they expire. One line per host, cron-friendly exit codes."
+        },
+        {
+            "slug": "voip-toll-fraud-watch",
+            "title": "VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk",
+            "file": "voip-toll-fraud-watch.sh",
+            "url": "https://scr.srvscripts.com/voip-toll-fraud-watch/voip-toll-fraud-watch.sh",
+            "sha256": "8377e331df3f994cc7b8e0b82193eeebb5ccffe5d9947994e9895d6c8c6fed39",
+            "page": "https://srvscripts.com/scripts/voip-toll-fraud-watch/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-16",
+            "summary": "A Bash script that reads the Asterisk or FreePBX call records every few minutes and raises an alarm on the patterns of toll fraud: bursts of international or premium-rate calls, long international talk time, calls outside office hours, one extension making far more calls than usual, and transit calls that come in on a trunk and go straight back out."
         },
         {
             "slug": "wordpress-version-audit",

@@ -16,23 +16,28 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 |---|---|---|
 | [Access Log Top IPs and Bots Report](https://srvscripts.com/scripts/web-log-top-ips/) | [`web-log-top-ips.sh`](web-log-top-ips/web-log-top-ips.sh) | 1.0.0 |
 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](https://srvscripts.com/scripts/asterisk-recordings-to-mp3/) | [`asterisk-recordings-to-mp3.sh`](asterisk-recordings-to-mp3/asterisk-recordings-to-mp3.sh) | 1.2.2 |
+| [Asterisk Security Audit: Check FreePBX for Toll Fraud Risks and Exposed Ports](https://srvscripts.com/scripts/asterisk-security-audit/) | [`asterisk-security-audit.sh`](asterisk-security-audit/asterisk-security-audit.sh) | 1.0.0 |
 | [AutoSSL DCV Failures Report](https://srvscripts.com/scripts/autossl-failure-report/) | [`autossl-failure-report.sh`](autossl-failure-report/autossl-failure-report.sh) | 1.0.0 |
 | [Backup Verify Script](https://srvscripts.com/scripts/backup-verify/) | [`backup-verify.sh`](backup-verify/backup-verify.sh) | 2.1.2 |
+| [Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings](https://srvscripts.com/scripts/recording-retention-cleaner/) | [`recording-retention-cleaner.sh`](recording-retention-cleaner/recording-retention-cleaner.sh) | 1.0.0 |
 | [cPanel Account Inventory](https://srvscripts.com/scripts/cpanel-account-inventory/) | [`cpanel-account-inventory.sh`](cpanel-account-inventory/cpanel-account-inventory.sh) | 1.0.0 |
 | [cPanel Disk Usage Report](https://srvscripts.com/scripts/cpanel-disk-usage-report/) | [`cpanel-disk-usage-report.sh`](cpanel-disk-usage-report/cpanel-disk-usage-report.sh) | 1.0.0 |
 | [cPanel PHP Version Audit](https://srvscripts.com/scripts/cpanel-php-version-audit/) | [`cpanel-php-version-audit.sh`](cpanel-php-version-audit/cpanel-php-version-audit.sh) | 1.0.0 |
 | [Disk and Inode Alert](https://srvscripts.com/scripts/disk-inode-alert/) | [`disk-inode-alert.sh`](disk-inode-alert/disk-inode-alert.sh) | 1.0.0 |
 | [Exim Mail Queue Report](https://srvscripts.com/scripts/exim-mail-queue-report/) | [`exim-mail-queue-report.sh`](exim-mail-queue-report/exim-mail-queue-report.sh) | 1.0.0 |
+| [FreePBX Off-Site Backup Script: Databases, Config and Voicemail over rsync](https://srvscripts.com/scripts/freepbx-offsite-backup/) | [`freepbx-offsite-backup.sh`](freepbx-offsite-backup/freepbx-offsite-backup.sh) | 1.0.0 |
 | [Inode Usage Report: Top Directories by File Count per Account](https://srvscripts.com/scripts/inode-usage-report/) | [`inode-usage-report.sh`](inode-usage-report/inode-usage-report.sh) | 1.1.0 |
 | [MariaDB Slow Query Log Summary](https://srvscripts.com/scripts/mariadb-slow-query-summary/) | [`mariadb-slow-query-summary.sh`](mariadb-slow-query-summary/mariadb-slow-query-summary.sh) | 1.0.0 |
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |
+| [PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones](https://srvscripts.com/scripts/pjsip-health-check/) | [`pjsip-health-check.sh`](pjsip-health-check/pjsip-health-check.sh) | 1.0.0 |
 | [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](https://srvscripts.com/scripts/process-hog-report/) | [`process-hog-report.sh`](process-hog-report/process-hog-report.sh) | 1.0.0 |
 | [Redirect Chain Checker](https://srvscripts.com/scripts/redirect-tester/) | [`redirect-tester.sh`](redirect-tester/redirect-tester.sh) | 1.0.0 |
 | [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.3.0 |
 | [Server Inventory Report](https://srvscripts.com/scripts/server-inventory-report/) | [`server-inventory-report.sh`](server-inventory-report/server-inventory-report.sh) | 1.0.1 |
 | [Server Security Audit Script](https://srvscripts.com/scripts/server-security-audit/) | [`server-security-audit.sh`](server-security-audit/server-security-audit.sh) | 2.3.0 |
 | [SSL Expiry Check Script: Free Network Test for Web and Mail](https://srvscripts.com/scripts/ssl-expiry-check/) | [`ssl-expiry-check.sh`](ssl-expiry-check/ssl-expiry-check.sh) | 1.1.0 |
+| [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](https://srvscripts.com/scripts/voip-toll-fraud-watch/) | [`voip-toll-fraud-watch.sh`](voip-toll-fraud-watch/voip-toll-fraud-watch.sh) | 1.0.0 |
 | [WordPress Version Audit: Find Every WordPress Site and Its Version](https://srvscripts.com/scripts/wordpress-version-audit/) | [`wordpress-version-audit.sh`](wordpress-version-audit/wordpress-version-audit.sh) | 1.1.0 |
 
 ## PowerShell
