@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PJSIP Health Check: Trunks, Registrations, Phones and Call Load for Asterisk and FreePBX (v1.0.0) - from srvScripts.com
+# PJSIP Health Check: Trunks, Registrations, Phones and Call Load for Asterisk and FreePBX (v1.0.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/pjsip-health-check/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -16,14 +16,17 @@
 # What counts as a trunk: an endpoint with an outbound registration, an identify (match=) section, or a name that is
 # not all digits. Everything else is treated as a phone. Unreachable trunks are CRITICAL; unreachable phones are
 # only listed (offices close at night) unless you add --phones-warn.
-# Exit codes (Nagios/Icinga compatible): 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN (Asterisk not running, bad option).
+# Exit codes (Nagios/Icinga compatible): 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN (Asterisk not running, a CLI query
+# failed or answered in an unexpected format, bad option).
+# Version 1.0.1 (2026-10-17): a failed or malformed CLI query is UNKNOWN (1.0.0 could report OK with zero objects);
+#   endpoints without a caller ID (typical for trunks) are now counted; new --require-trunk; notification state is saved per channel only after delivery. Found in an independent review.
 # Version 1.0.0 (2026-10-17): first release. Tested on FreePBX 17.0.33 / Asterisk 22.11 (Debian 12) with a
 #   registered trunk, a trunk taken down, one reachable and two unreachable phones, and calls in progress.
 set -uo pipefail
 export LC_ALL=C
 
 RTT_WARN=200; RTT_CRIT=800; MAX_CALLS=0; PHONES_WARN=0; IGNORE=""; JSON=0; QUIET=0; MAIL_TO=""; WEBHOOK=""
-NOTIFY_CHANGE=0; STATE_DIR=/var/lib/pjsip-health-check; AST=${ASTERISK_BIN:-asterisk}; TIMEOUT=10
+NOTIFY_CHANGE=0; STATE_DIR=/var/lib/pjsip-health-check; AST=${ASTERISK_BIN:-asterisk}; TIMEOUT=10; REQUIRE=""
 
 usage() {
   cat <<'EOF'
@@ -40,6 +43,8 @@ Usage: pjsip-health-check.sh [options]
   --webhook URL        POST the JSON report to URL (Slack/Discord/Teams-compatible "text" field included)
   --notify-on-change   only send mail/webhook when the set of problems changes (state in /var/lib/pjsip-health-check)
   --state-dir DIR      where the change-detection state is kept
+  --require-trunk LIST comma-separated trunk names that must exist; a missing one is CRITICAL (catches a trunk
+                       that disappeared from the configuration, which would otherwise just lower the counts)
   --timeout SEC        seconds to wait for each Asterisk CLI command (default 10)
   -h, --help           this help
 Environment: ASTERISK_BIN path to the asterisk binary (default: asterisk in PATH)
@@ -61,6 +66,7 @@ while [ $# -gt 0 ]; do
     --webhook) WEBHOOK="${2:-}"; [[ "$WEBHOOK" =~ ^https?:// ]] || die "--webhook needs an http(s) URL"; shift 2 ;;
     --notify-on-change) NOTIFY_CHANGE=1; shift ;;
     --state-dir) STATE_DIR="${2:-}"; [ -n "$STATE_DIR" ] || die "--state-dir needs a folder"; shift 2 ;;
+    --require-trunk) REQUIRE="${2:-}"; [ -n "$REQUIRE" ] || die "--require-trunk needs a name list"; shift 2 ;;
     --timeout) num "$1" "${2:-}"; TIMEOUT=$2; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown option: $1" ;;
@@ -78,17 +84,30 @@ reload_s=$(awk -F': ' '/Last reload/{print $2+0}' <<<"$up")
 ver=$(ax "core show version" | awk '{print $2; exit}')
 ax "module show like res_pjsip.so" | grep -q 'res_pjsip.so' || die "chan_pjsip/res_pjsip is not loaded on this Asterisk"
 
-STATUS=0; PROBLEMS=(); INFO=()
-add() { # level text
+STATUS=0; PROBLEMS=(); INFO=(); regs=""; idents=""; ctc=""; eps=""; chancount=""
+add() { # level text. UNKNOWN (3) wins over CRITICAL: the check itself could not see the PBX.
   local lv=$1; shift
-  case "$lv" in CRIT) [ "$STATUS" -lt 2 ] && STATUS=2 ;; WARN) [ "$STATUS" -lt 1 ] && STATUS=1 ;; esac
+  case "$lv" in UNKNOWN) STATUS=3 ;; CRIT) [ "$STATUS" -lt 2 ] && STATUS=2 ;; WARN) [ "$STATUS" -lt 1 ] && STATUS=1 ;; esac
   PROBLEMS+=("$lv $*")
+}
+# q WHAT CMD REGEX: run a CLI command and accept its output only if the command succeeded and the output has
+# the expected shape ("No objects found." is a real, valid empty answer). Anything else is UNKNOWN, never a
+# healthy zero count.
+q() { # VAR WHAT CMD REGEX (sets VAR; runs in this shell so UNKNOWN reaches STATUS)
+  local var=$1 what=$2 cmd=$3 re=$4 out rc
+  printf -v "$var" '%s' ""
+  out=$(timeout "$TIMEOUT" "$AST" -rx "$cmd" 2>&1); rc=$?
+  if [ "$rc" -ne 0 ] || ! grep -Eq -- "$re" <<<"$out" || grep -Eqi 'No such command|Unable to connect|permission denied' <<<"$out"; then
+    add UNKNOWN "could not read $what ('$cmd' exit $rc$([ "$rc" = 124 ] && echo ', timed out'): $(head -1 <<<"$out" | cut -c1-80))"
+    return 1
+  fi
+  printf -v "$var" '%s' "$out"
 }
 skip() { [ -n "$IGNORE" ] && grep -Eq -- "$IGNORE" <<<"$1"; }
 
 # Trunk names: endpoints with a registration or identify section, or non-numeric names
-regs=$(ax "pjsip show registrations")
-idents=$(ax "pjsip show identifies")
+q regs registrations "pjsip show registrations" 'No objects found|<Registration|/sip'
+q idents identifies "pjsip show identifies" 'No objects found|Identify:'
 declare -A TRUNK=()
 while read -r n; do [ -n "$n" ] && TRUNK[$n]=1; done < <(awk '/^ *[^ <=]+\/sip:/{split($1,a,"/"); print a[1]}' <<<"$regs")
 while read -r n; do [ -n "$n" ] && TRUNK[$n]=1; done < <(awk '$1=="Identify:" && $2 !~ /^</ {split($2,a,"/"); print a[2]}' <<<"$idents")
@@ -105,7 +124,7 @@ while read -r line; do
 done < <(grep -E '^ *[^ <=]+/sip' <<<"$regs")
 
 # 2. Contacts (qualify reachability and round-trip time)
-ctc=$(ax "pjsip show contacts")
+q ctc contacts "pjsip show contacts" 'No objects found|Contact:'
 declare -A AORSTATE=()
 c_total=0; c_avail=0
 while read -r aor uri status rtt; do
@@ -133,9 +152,11 @@ while read -r aor uri status rtt; do
 done < <(awk '$1=="Contact:" && $2 ~ /\// && $2 !~ /^</ {split($2,a,"/"); u=substr($2,length(a[1])+2); print a[1], u, $(NF-1), $NF}' <<<"$ctc")
 
 # 3. Endpoints: states, and phones/trunks with no contact at all
-eps=$(ax "pjsip show endpoints")
+q eps endpoints "pjsip show endpoints" 'No objects found|Endpoint:'
+declare -A SEEN=()
 e_total=0; e_unavail=0; e_inuse=0; nocontact=()
 while read -r ename estate; do
+  SEEN[$ename]=1
   skip "$ename" && continue
   e_total=$((e_total + 1))
   case "$estate" in
@@ -145,19 +166,26 @@ while read -r ename estate; do
   if [ "$estate" = Unavailable ] && [ -z "${AORSTATE[$ename]:-}" ]; then
     if [ -n "${TRUNK[$ename]:-}" ]; then add CRIT "trunk $ename is Unavailable (no reachable contact)"; else nocontact+=("$ename"); fi
   fi
-done < <(awk '$1=="Endpoint:" && $2 ~ /\// && $2 !~ /^<Endpoint/ {split($2,a,"/"); st=$3; for(i=4;i<=NF-3;i++) st=st" "$i; print a[1], st}' <<<"$eps")
+done < <(awk '$1=="Endpoint:" && $2 !~ /^<Endpoint/ && NF>=6 {split($2,a,"/"); st=$3; for(i=4;i<=NF-3;i++) st=st" "$i; print a[1], st}' <<<"$eps")
 [ "${#nocontact[@]}" -gt 0 ] && {
   msg="${#nocontact[@]} phone(s) not registered: $(printf '%s ' "${nocontact[@]:0:15}")"; [ "${#nocontact[@]}" -gt 15 ] && msg+="..."
   if [ "$PHONES_WARN" = 1 ]; then add WARN "$msg"; else INFO+=("$msg"); fi
 }
 
+# Required trunks (only judged when the endpoint list itself could be read)
+if [ -n "$REQUIRE" ] && [ -n "$eps" ]; then
+  IFS=',' read -ra req <<<"$REQUIRE"
+  for t in "${req[@]}"; do t=${t// /}; [ -n "$t" ] && [ -z "${SEEN[$t]:-}" ] && add CRIT "required trunk $t is not configured (no such endpoint)"; done
+fi
+
 # 4. Calls in progress
-calls=$(ax "core show channels count" | awk '/active call/{print $1+0}')
+q chancount "active calls" "core show channels count" 'active call'
+calls=$(awk '/active call/{print $1+0}' <<<"$chancount")
 calls=${calls:-0}
 if [ "$MAX_CALLS" -gt 0 ] && [ "$calls" -gt "$MAX_CALLS" ]; then add WARN "$calls active calls (limit $MAX_CALLS): check for toll fraud or a call loop"; fi
 [ "$uptime_s" -lt 300 ] && add WARN "Asterisk restarted $uptime_s seconds ago"
 
-label=(OK WARNING CRITICAL)
+label=(OK WARNING CRITICAL UNKNOWN)
 host=$(hostname -f 2>/dev/null || hostname)
 summary="${label[$STATUS]}: registrations $reg_ok/$reg_total up, contacts $c_avail/$c_total reachable, endpoints $e_total ($e_unavail unavailable, $e_inuse busy), $calls active call(s)"
 
@@ -179,25 +207,31 @@ report() {
 
 if [ "$JSON" = 1 ]; then json; elif [ "$QUIET" = 0 ] || [ "$STATUS" -gt 0 ]; then report; fi
 
-# Notifications
+# Notifications. With --notify-on-change the state is saved per channel and only after that channel delivered,
+# so a failed mail or webhook is retried on the next run.
+deliver() { # channel
+  case "$1" in
+    mail) command -v mail >/dev/null 2>&1 || { echo "pjsip-health-check: 'mail' command not found, cannot e-mail $MAIL_TO" >&2; return 1; }
+          report | mail -s "[PJSIP] ${label[$STATUS]} on $host" "$MAIL_TO" ;;
+    webhook) json | curl -fsS -m 15 -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" >/dev/null ;;
+  esac
+}
 if [ -n "$MAIL_TO$WEBHOOK" ]; then
-  send=1
-  if [ "$NOTIFY_CHANGE" = 1 ]; then
-    mkdir -p "$STATE_DIR" 2>/dev/null && chmod 700 "$STATE_DIR" 2>/dev/null
-    sig=$(printf '%s\n' "${label[$STATUS]}" "${PROBLEMS[@]}" | sed -E 's/round-trip [0-9.]+ ms/round-trip/' | sha256sum | cut -c1-16)
-    old=$(cat "$STATE_DIR/last" 2>/dev/null || true)
-    [ "$sig" = "$old" ] && send=0
-    echo "$sig" > "$STATE_DIR/last" 2>/dev/null || echo "pjsip-health-check: cannot write $STATE_DIR/last" >&2
-    [ -z "$old" ] && [ "$STATUS" = 0 ] && send=0   # first run and healthy: nothing to announce
-  elif [ "$STATUS" = 0 ]; then send=0; fi
-  if [ "$send" = 1 ]; then
-    if [ -n "$MAIL_TO" ]; then
-      if command -v mail >/dev/null 2>&1; then report | mail -s "[PJSIP] ${label[$STATUS]} on $host" "$MAIL_TO" || echo "pjsip-health-check: mail failed" >&2
-      else echo "pjsip-health-check: 'mail' command not found, cannot e-mail $MAIL_TO" >&2; fi
-    fi
-    if [ -n "$WEBHOOK" ]; then
-      json | curl -fsS -m 15 -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" >/dev/null || echo "pjsip-health-check: webhook POST failed" >&2
-    fi
-  fi
+  sig=$(printf '%s\n' "${label[$STATUS]}" "${PROBLEMS[@]}" | sed -E 's/round-trip [0-9.]+ ms/round-trip/' | sha256sum | cut -c1-16)
+  [ "$NOTIFY_CHANGE" = 1 ] && { mkdir -p "$STATE_DIR" 2>/dev/null && chmod 700 "$STATE_DIR" 2>/dev/null; }
+  for ch in mail webhook; do
+    [ "$ch" = mail ] && [ -z "$MAIL_TO" ] && continue
+    [ "$ch" = webhook ] && [ -z "$WEBHOOK" ] && continue
+    send=1
+    if [ "$NOTIFY_CHANGE" = 1 ]; then
+      old=$(cat "$STATE_DIR/last.$ch" 2>/dev/null || true)
+      [ "$sig" = "$old" ] && send=0
+      [ -z "$old" ] && [ "$STATUS" = 0 ] && { send=0; echo "$sig" > "$STATE_DIR/last.$ch" 2>/dev/null; }  # first run and healthy
+    elif [ "$STATUS" = 0 ]; then send=0; fi
+    [ "$send" = 1 ] || continue
+    if deliver "$ch"; then
+      [ "$NOTIFY_CHANGE" = 1 ] && { echo "$sig" > "$STATE_DIR/last.$ch" 2>/dev/null || echo "pjsip-health-check: cannot write $STATE_DIR/last.$ch" >&2; }
+    else echo "pjsip-health-check: $ch delivery failed; it will be retried on the next run" >&2; fi
+  done
 fi
 exit "$STATUS"

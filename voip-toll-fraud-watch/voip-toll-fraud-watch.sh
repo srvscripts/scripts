@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# VoIP Toll Fraud Watch: Alert on International, Premium and After-Hours Calls from Asterisk/FreePBX CDR (v1.0.0) - from srvScripts.com
+# VoIP Toll Fraud Watch: Alert on International, Premium and After-Hours Calls from Asterisk/FreePBX CDR (v1.0.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/voip-toll-fraud-watch/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -14,6 +14,9 @@
 #   */10 * * * * root /usr/local/bin/voip-toll-fraud-watch.sh --minutes 10 --quiet --mail ops@example.com
 #
 # Exit codes: 0 nothing suspicious, 1 warning, 2 alarm, 3 could not read the CDR or bad option.
+# Version 1.0.1 (2026-10-17): on FreePBX (or with --source db) a CDR database that cannot be queried is UNKNOWN (exit 3);
+#   1.0.0 could fall back to an old Master.csv and report OK. A skipped transit check is shown. Notification state
+#   is saved per channel only after delivery. Found in an independent review.
 # Version 1.0.0 (2026-10-17): first release. Tested on FreePBX 17.0.33 / Asterisk 22.11 (Debian 12) with simulated
 #   international bursts, after-hours calls and normal domestic traffic through a test carrier.
 set -uo pipefail
@@ -76,7 +79,16 @@ for re in "$INTL_RE" "$PREMIUM_RE" "${ALLOW_RE:-x}"; do echo | grep -Eq -- "$re"
 TMP=$(mktemp -d) || die "mktemp failed"; trap 'rm -rf "$TMP"' EXIT
 rows=$TMP/rows
 since=$(date -d "-$MIN minutes" '+%F %T')
-if [ "$SOURCE" != csv ] && command -v mysql >/dev/null 2>&1 && mysql "${MA[@]}" -N -B "$DB" -e "SELECT 1" >/dev/null 2>&1; then
+# On FreePBX the CDR lives in the database: if that database cannot be queried, stop with UNKNOWN (exit 3) instead of
+# quietly reading an old or empty Master.csv and reporting "nothing suspicious".
+dbok=0; dberr=""
+if [ "$SOURCE" != csv ] && command -v mysql >/dev/null 2>&1; then
+  if dberr=$(mysql "${MA[@]}" -N -B "$DB" -e "SELECT 1" 2>&1 >/dev/null); then dbok=1; fi
+fi
+if [ "$dbok" = 0 ] && [ "$SOURCE" != csv ] && { [ "$SOURCE" = db ] || [ -f /etc/freepbx.conf ]; }; then
+  die "cannot query the CDR database $DB ($(head -1 <<<"${dberr:-mysql client not installed}" | cut -c1-100)); check MariaDB and MYSQL_ARGS"
+fi
+if [ "$dbok" = 1 ]; then
   src=db
   mysql "${MA[@]}" -N -B "$DB" -e "SELECT calldate, src, dst, disposition, billsec, channel, dstchannel, WEEKDAY(calldate)+1, HOUR(calldate) FROM cdr
     WHERE calldate >= '$since' AND dstchannel <> '' AND dstchannel NOT LIKE 'Local/%' ORDER BY calldate" > "$rows" 2>/dev/null \
@@ -115,10 +127,12 @@ top_src=$(awk -F'\t' '{c[$2]++} END{for(k in c) print c[k], k}' "$rows" | sort -
 failed=$(awk -F'\t' 'BEGIN{ire=ENVIRON["INTL_RE"]} {d=$3; gsub(/[^0-9+]/,"",d)} d ~ ire && $4 != "ANSWERED" {n++} END{print n+0}' "$rows")
 
 # Transit: the call came in on a trunk (channel = a trunk) and left on a trunk
-trunks=""
+trunks=""; transit_note=""
 if [ "$src" = db ] && mysql "${MA[@]}" -N -B asterisk -e "SELECT 1" >/dev/null 2>&1; then
-  trunks=$(mysql "${MA[@]}" -N -B asterisk -e "SELECT channelid FROM trunks WHERE disabled <> 'on'" 2>/dev/null | sed -E 's#.*@##; s#^[A-Z0-9]+/##; s#[/$].*##' | grep -E '^[A-Za-z0-9_.-]+$' | sort -u | paste -sd'|')
-fi
+  if tl=$(mysql "${MA[@]}" -N -B asterisk -e "SELECT channelid FROM trunks WHERE disabled <> 'on'" 2>/dev/null); then
+    trunks=$(sed -E 's#.*@##; s#^[A-Z0-9]+/##; s#[/$].*##' <<<"$tl" | grep -E '^[A-Za-z0-9_.-]+$' | sort -u | paste -sd'|')
+  else transit_note="transit check skipped: the FreePBX trunk list could not be read"; fi
+else transit_note="transit check skipped: no FreePBX trunk list (plain Asterisk or CSV source)"; fi
 transit=0
 [ -n "$trunks" ] && transit=$(awk -F'\t' -v t="$trunks" '$6 ~ "^(PJSIP|SIP|IAX2)/(" t ")-" {n++} END{print n+0}' "$rows")
 
@@ -145,21 +159,27 @@ report() {
   local x; for x in "${FIND[@]}"; do echo "  $x"; done
   if [ "$intl_calls" -gt 0 ]; then echo "  International/premium by country code (calls, code):"; sed 's/^/    /' <<<"$top_dst"; fi
   if [ "$total" -gt 0 ]; then echo "  Top sources (calls, caller):"; sed 's/^/    /' <<<"$top_src"; fi
+  [ -n "$transit_note" ] && echo "  note: $transit_note"
   echo "$summary"
 }
 if [ "$JSON" = 1 ]; then json; elif [ "$QUIET" = 0 ] || [ "$STATUS" -gt 0 ]; then report; fi
 
+# Notifications: per channel; with change detection the state is saved only after that channel delivered, so a
+# failed mail or webhook is retried on the next run. Unchanged findings are re-sent after 2 hours.
 if [ -n "$MAIL_TO$WEBHOOK" ] && [ "$STATUS" -gt 0 ]; then
-  send=1
-  if [ "$NOTIFY_CHANGE" = 1 ]; then
-    mkdir -p "$STATE_DIR" 2>/dev/null && chmod 700 "$STATE_DIR" 2>/dev/null
-    sig=$(printf '%s\n' "${FIND[@]}" | sed -E 's/[0-9]+//g' | sha256sum | cut -c1-16); last=$(cat "$STATE_DIR/last" 2>/dev/null || true)
-    [ "$sig" = "$last" ] && [ -n "$(find "$STATE_DIR/last" -mmin -120 2>/dev/null)" ] && send=0
-    [ "$send" = 1 ] && echo "$sig" > "$STATE_DIR/last"
-  fi
-  if [ "$send" = 1 ]; then
-    [ -n "$MAIL_TO" ] && { report | mail -s "[TOLL FRAUD] ${label[$STATUS]} on $host" "$MAIL_TO" || echo "voip-toll-fraud-watch: mail failed" >&2; }
-    [ -n "$WEBHOOK" ] && { json | curl -fsS -m 15 -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" >/dev/null || echo "voip-toll-fraud-watch: webhook failed" >&2; }
-  fi
+  sig=$(printf '%s\n' "${FIND[@]}" | sed -E 's/[0-9]+//g' | sha256sum | cut -c1-16)
+  [ "$NOTIFY_CHANGE" = 1 ] && { mkdir -p "$STATE_DIR" 2>/dev/null && chmod 700 "$STATE_DIR" 2>/dev/null; }
+  for ch in mail webhook; do
+    [ "$ch" = mail ] && [ -z "$MAIL_TO" ] && continue
+    [ "$ch" = webhook ] && [ -z "$WEBHOOK" ] && continue
+    if [ "$NOTIFY_CHANGE" = 1 ] && [ "$sig" = "$(cat "$STATE_DIR/last.$ch" 2>/dev/null)" ] && [ -n "$(find "$STATE_DIR/last.$ch" -mmin -120 2>/dev/null)" ]; then continue; fi
+    ok=1
+    if [ "$ch" = mail ]; then
+      if command -v mail >/dev/null 2>&1; then report | mail -s "[TOLL FRAUD] ${label[$STATUS]} on $host" "$MAIL_TO" || ok=0
+      else echo "voip-toll-fraud-watch: 'mail' command not found" >&2; ok=0; fi
+    else json | curl -fsS -m 15 -H 'Content-Type: application/json' --data-binary @- "$WEBHOOK" >/dev/null || ok=0; fi
+    if [ "$ok" = 1 ]; then [ "$NOTIFY_CHANGE" = 1 ] && echo "$sig" > "$STATE_DIR/last.$ch" 2>/dev/null
+    else echo "voip-toll-fraud-watch: $ch delivery failed; it will be retried on the next run" >&2; fi
+  done
 fi
 exit "$STATUS"

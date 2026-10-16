@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-16T22:54:34+00:00",
+    "generated": "2026-10-16T23:58:45+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -80,10 +80,10 @@
             "title": "Asterisk Security Audit: Check FreePBX for Toll Fraud Risks and Exposed Ports",
             "file": "asterisk-security-audit.sh",
             "url": "https://scr.srvscripts.com/asterisk-security-audit/asterisk-security-audit.sh",
-            "sha256": "aa83bab4b250953f9316fad7d45b38fa45206b4a1071bee7a2cded72a42cf07f",
+            "sha256": "bc8db9db8c183e3aa9897f9c1011f9301afa19072fb1e800f753a16752d1ab40",
             "page": "https://srvscripts.com/scripts/asterisk-security-audit/",
             "language": "Bash",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "updated": "2026-10-16",
             "summary": "A read-only Bash audit for Asterisk and FreePBX that finds the settings behind toll fraud and hijacked PBXs: unsupported versions, public AMI or IAX2, weak SIP passwords, anonymous SIP, trusted IPs in internal contexts, a blind fail2ban jail and unprotected international routes, each with a one-line fix."
         },
@@ -128,10 +128,10 @@
             "title": "Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings",
             "file": "recording-retention-cleaner.sh",
             "url": "https://scr.srvscripts.com/recording-retention-cleaner/recording-retention-cleaner.sh",
-            "sha256": "1d1ea355d5d06d46062b2ad598c800dd73754d7a0292ec0729b50ed2085c5e3e",
+            "sha256": "25a23f2effd330e89c9d6f6f708fa6a1cda820f4d8e69b494863a59acf3d13ac",
             "page": "https://srvscripts.com/scripts/recording-retention-cleaner/",
             "language": "Bash",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "updated": "2026-10-16",
             "summary": "A Bash script that enforces a retention period on Asterisk and FreePBX call recordings. It is a dry run by default, can archive old recordings into a verified tar.gz before deleting them, skips calls still being recorded, can stop the FreePBX call log linking to removed files, and can run only when the disk is filling up."
         },
@@ -248,10 +248,10 @@
             "title": "FreePBX Off-Site Backup Script: Databases, Config and Voicemail over rsync",
             "file": "freepbx-offsite-backup.sh",
             "url": "https://scr.srvscripts.com/freepbx-offsite-backup/freepbx-offsite-backup.sh",
-            "sha256": "d835a797a3d34d977b962100ce7cfdc9a5e2739c962c09a06936278e14e555f1",
+            "sha256": "6b519fad832317297122f91df1b864a57d2fb42af3b084219ee8f275fbe36378",
             "page": "https://srvscripts.com/scripts/freepbx-offsite-backup/",
             "language": "Bash",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "updated": "2026-10-16",
             "summary": "A Bash script that backs up a FreePBX or Asterisk server without the FreePBX Backup module: both databases, the Asterisk internal database, configuration, voicemail, prompts and provisioning files, with checksums, a read-back check, an rsync/SSH copy to another server that is verified, and pruning of old sets."
         },
@@ -392,10 +392,10 @@
             "title": "PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones",
             "file": "pjsip-health-check.sh",
             "url": "https://scr.srvscripts.com/pjsip-health-check/pjsip-health-check.sh",
-            "sha256": "651c7a13a011b0e7b13a80dac05c4dd8ccf3c458d57e645132a80e3889e28255",
+            "sha256": "b388b3c9fbd4871542fded1b647c8b717af5b3bbf3c0dd08f5d72c1e19d38d33",
             "page": "https://srvscripts.com/scripts/pjsip-health-check/",
             "language": "Bash",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "updated": "2026-10-16",
             "summary": "A read-only Bash script that checks Asterisk and FreePBX PJSIP trunks, outbound registrations, contact round-trip times, phones and active calls, with Nagios-style exit codes, JSON output and mail or webhook alerts when something changes."
         },
@@ -488,10 +488,10 @@
             "title": "VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk",
             "file": "voip-toll-fraud-watch.sh",
             "url": "https://scr.srvscripts.com/voip-toll-fraud-watch/voip-toll-fraud-watch.sh",
-            "sha256": "8377e331df3f994cc7b8e0b82193eeebb5ccffe5d9947994e9895d6c8c6fed39",
+            "sha256": "b687d3da26669e27f4d6972d353f1d7b7c8158575cb9edc7b8316b152450ac89",
             "page": "https://srvscripts.com/scripts/voip-toll-fraud-watch/",
             "language": "Bash",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "updated": "2026-10-16",
             "summary": "A Bash script that reads the Asterisk or FreePBX call records every few minutes and raises an alarm on the patterns of toll fraud: bursts of international or premium-rate calls, long international talk time, calls outside office hours, one extension making far more calls than usual, and transit calls that come in on a trunk and go straight back out."
         },

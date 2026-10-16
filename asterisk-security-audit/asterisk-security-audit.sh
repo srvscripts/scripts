@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Asterisk and FreePBX Security Audit: Toll Fraud, Exposed Ports, Weak Secrets, Fail2ban (v1.0.0) - from srvScripts.com
+# Asterisk and FreePBX Security Audit: Toll Fraud, Exposed Ports, Weak Secrets, Fail2ban (v1.0.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/asterisk-security-audit/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -14,8 +14,12 @@
 #   bash asterisk-security-audit.sh --json     # JSON for monitoring
 #   bash asterisk-security-audit.sh --fails-only
 #
-# Exit codes: 0 no warnings, 1 warnings only, 2 at least one FAIL, 3 could not run (Asterisk not reachable, bad option).
+# Exit codes: 0 no warnings, 1 warnings only, 2 at least one FAIL, 3 could not run or a check could not run (UNKNOWN,
+# e.g. Asterisk or the FreePBX database not readable) and nothing failed.
 # Run as root (it reads /etc/asterisk, the FreePBX database and the firewall).
+# Version 1.0.1 (2026-10-17): a CLI or database query that fails is reported as UNKNOWN (exit 3) instead of a PASS
+#   built on empty data (anonymous endpoint, IP trust, international routes, FreePBX database). Found in an
+#   independent review.
 # Version 1.0.0 (2026-10-17): first release. Tested on FreePBX 17.0.33 / Asterisk 22.11 on Debian 12 (fresh
 #   --opensourceonly install with a trunk, 3 extensions and international routes).
 set -uo pipefail
@@ -49,12 +53,20 @@ done
 [ "$EUID" -eq 0 ] || die "run as root (reads /etc/asterisk, the firewall and the FreePBX database)"
 command -v "$AST" >/dev/null 2>&1 || die "asterisk binary not found"
 ax() { timeout 10 "$AST" -rx "$1" 2>/dev/null; }
+# axc VAR CMD REGEX: checked CLI query; VAR is set only when the command succeeded and its output has the expected
+# shape. Returns 1 otherwise, so the caller reports UNKNOWN instead of a PASS built on empty data.
+axc() { local out rc; out=$(timeout 10 "$AST" -rx "$2" 2>&1); rc=$?; printf -v "$1" '%s' "$out"
+  [ "$rc" -eq 0 ] && grep -Eq -- "$3" <<<"$out" && ! grep -Eqi 'No such command|Unable to connect' <<<"$out"; }
 VER=$(ax "core show version" | awk '/^Asterisk/{print $2; exit}')
 [ -n "$VER" ] || die "cannot talk to Asterisk (is it running?)"
 
-FREEPBX=0; [ -r /etc/freepbx.conf ] && "${MYSQL[@]}" asterisk -e "SELECT 1" >/dev/null 2>&1 && FREEPBX=1
 declare -a SEV=() ID=() MSG=() FIX=()
 f() { SEV+=("$1"); ID+=("$2"); MSG+=("$3"); FIX+=("${4:-}"); }   # severity id message fix
+FREEPBX=0; FPBX_FILE=0; [ -r /etc/freepbx.conf ] && FPBX_FILE=1
+if [ "$FPBX_FILE" = 1 ]; then
+  if "${MYSQL[@]}" asterisk -e "SELECT 1" >/dev/null 2>&1; then FREEPBX=1
+  else f UNKNOWN freepbx_db "FreePBX is installed but its database cannot be queried: the route and admin-user checks were NOT run" "Check that MariaDB runs, or pass credentials in MYSQL_ARGS, then run the audit again."; fi
+fi
 
 # 1. Asterisk version support (dates from docs.asterisk.org/About-the-Project/Asterisk-Versions/, checked 2026-10-17)
 major=${VER%%.*}; major=${major//[^0-9]/}
@@ -117,8 +129,10 @@ if [ "${h_en:-no}" = yes ]; then
 fi
 
 # 6. Anonymous / guest SIP
-anon=$(ax "pjsip show endpoint anonymous")
-if grep -q 'Endpoint:' <<<"$anon"; then
+anon=""
+if ! axc anon "pjsip show endpoint anonymous" 'Endpoint:|Unable to find object'; then
+  f UNKNOWN anonymous "Could not check for an anonymous PJSIP endpoint (CLI query failed)" "Run: asterisk -rx 'pjsip show endpoint anonymous'"
+elif grep -q 'Endpoint:' <<<"$anon"; then
   ctx=$(awk '$1=="context"{print $3; exit}' <<<"$anon")
   f WARN anonymous "PJSIP 'anonymous' endpoint exists (context ${ctx:-?}): unauthenticated calls are accepted" "FreePBX: Settings > Asterisk SIP Settings > Allow Anonymous Inbound SIP Calls = No, unless you need it."
 else f PASS anonymous "No anonymous (guest) PJSIP endpoint"; fi
@@ -138,14 +152,19 @@ elif [ "${#weak[@]}" -gt 0 ]; then f FAIL pjsip_secret "${#weak[@]} of $total PJ
 else f PASS pjsip_secret "All $total PJSIP passwords are $MINLEN+ characters and not guessable from the name"; fi
 
 # 8. Endpoints trusted by IP that land in an internal context
-bad=()
-while read -r ep; do
-  [ -n "$ep" ] || continue
-  c=$(ax "pjsip show endpoint $ep" | awk '$1=="context"{print $3; exit}')
-  case "$c" in from-internal*|default|internal|from-users) bad+=("$ep(context $c)") ;; esac
-done < <(ax "pjsip show identifies" | awk '$1=="Identify:" && $2 !~ /^</ {split($2,a,"/"); print a[2]}' | sort -u)
+bad=(); unk=(); idents=""
+if axc idents "pjsip show identifies" 'No objects found|Identify:'; then
+  while read -r ep; do
+    [ -n "$ep" ] || continue
+    epout=""; c=""
+    if axc epout "pjsip show endpoint $ep" 'Endpoint:'; then c=$(awk '$1=="context"{print $3; exit}' <<<"$epout"); fi
+    [ -n "$c" ] || { unk+=("$ep"); continue; }
+    case "$c" in from-internal*|default|internal|from-users) bad+=("$ep(context $c)") ;; esac
+  done < <(awk '$1=="Identify:" && $2 !~ /^</ {split($2,a,"/"); print a[2]}' <<<"$idents" | sort -u)
+else unk+=("(identify list)"); fi
+[ "${#unk[@]}" -gt 0 ] && f UNKNOWN ip_trust "Could not read the context of: ${unk[*]}" "Run: asterisk -rx 'pjsip show identifies' and 'pjsip show endpoint NAME'"
 if [ "${#bad[@]}" -gt 0 ]; then f FAIL ip_trust "IP-authenticated endpoints dial from an internal context: ${bad[*]}" "Trunks must use from-pstn/from-trunk; anyone who can spoof or share that IP can make outbound calls."
-else f PASS ip_trust "No IP-authenticated endpoint uses an internal context"; fi
+elif [ "${#unk[@]}" -eq 0 ]; then f PASS ip_trust "No IP-authenticated endpoint uses an internal context"; fi
 
 # 9. fail2ban sees Asterisk security events?
 if command -v fail2ban-client >/dev/null 2>&1 && fail2ban-client ping >/dev/null 2>&1; then
@@ -176,8 +195,10 @@ else f WARN firewall "No default-deny host firewall found (nftables/iptables/fir
 
 # 11. International dialling (FreePBX routes)
 if [ "$FREEPBX" = 1 ]; then
-  intl=$("${MYSQL[@]}" asterisk -e "SELECT DISTINCT CONCAT_WS('|', r.name, IFNULL(r.password,''), IFNULL(r.time_group_id,0)) FROM outbound_routes r JOIN outbound_route_patterns p USING(route_id) WHERE CONCAT(p.match_pattern_prefix,p.match_pattern_pass) REGEXP '^(9?011|9?00|\\\\+|_?011|_?00)'" 2>/dev/null)
-  if [ -n "$intl" ]; then
+  intl_ok=1
+  intl=$("${MYSQL[@]}" asterisk -e "SELECT DISTINCT CONCAT_WS('|', r.name, IFNULL(r.password,''), IFNULL(r.time_group_id,0)) FROM outbound_routes r JOIN outbound_route_patterns p USING(route_id) WHERE CONCAT(p.match_pattern_prefix,p.match_pattern_pass) REGEXP '^(9?011|9?00|\\\\+|_?011|_?00)'" 2>/dev/null) || intl_ok=0
+  if [ "$intl_ok" = 0 ]; then f UNKNOWN intl_route "Could not read the FreePBX outbound routes (query failed)" "Check the asterisk database; the international-route check was NOT run."
+  elif [ -n "$intl" ]; then
     while IFS='|' read -r rn pw tg; do
       if [ -z "$pw" ] && [ "${tg:-0}" = 0 ]; then f WARN intl_route "Outbound route '$rn' allows international calls with no PIN and no time condition" "Add a route password (PIN) or a time group, and set a per-call/day spend limit at your SIP provider."
       else f PASS intl_route "International route '$rn' is protected (PIN or time condition)"; fi
@@ -204,18 +225,18 @@ if ss -H -lnt 2>/dev/null | awk '{print $4}' | grep -qE '(^0\.0\.0\.0|^\*|^\[::\
 fi
 
 # ---------- report ----------
-nf=0; nw=0; np=0
-for s in "${SEV[@]}"; do case "$s" in FAIL) nf=$((nf+1)) ;; WARN) nw=$((nw+1)) ;; PASS) np=$((np+1)) ;; esac; done
+nf=0; nw=0; np=0; nu=0
+for s in "${SEV[@]}"; do case "$s" in FAIL) nf=$((nf+1)) ;; WARN) nw=$((nw+1)) ;; PASS) np=$((np+1)) ;; UNKNOWN) nu=$((nu+1)) ;; esac; done
 host=$(hostname -f 2>/dev/null || hostname)
-rc=0; [ "$nw" -gt 0 ] && rc=1; [ "$nf" -gt 0 ] && rc=2
+rc=0; [ "$nw" -gt 0 ] && rc=1; [ "$nu" -gt 0 ] && rc=3; [ "$nf" -gt 0 ] && rc=2
 if [ "$JSON" = 1 ]; then
   js() { local s=${1//\\/\\\\}; s=${s//\"/\\\"}; printf '"%s"' "${s//$'\t'/ }"; }
-  printf '{"host":%s,"asterisk":%s,"freepbx":%s,"date":%s,"fail":%s,"warn":%s,"pass":%s,"findings":[' "$(js "$host")" "$(js "$VER")" "$([ $FREEPBX = 1 ] && echo true || echo false)" "$(js "$TODAY")" "$nf" "$nw" "$np"
+  printf '{"host":%s,"asterisk":%s,"freepbx":%s,"date":%s,"fail":%s,"warn":%s,"unknown":%s,"pass":%s,"findings":[' "$(js "$host")" "$(js "$VER")" "$([ $FREEPBX = 1 ] && echo true || echo false)" "$(js "$TODAY")" "$nf" "$nw" "$nu" "$np"
   for i in "${!SEV[@]}"; do [ "$i" -gt 0 ] && printf ','; printf '{"severity":%s,"id":%s,"message":%s,"fix":%s}' "$(js "${SEV[$i]}")" "$(js "${ID[$i]}")" "$(js "${MSG[$i]}")" "$(js "${FIX[$i]}")"; done
   printf ']}\n'
 else
   echo "Asterisk security audit: $host, Asterisk $VER$([ $FREEPBX = 1 ] && echo ', FreePBX'), $TODAY"
-  for sev in FAIL WARN INFO PASS; do
+  for sev in FAIL UNKNOWN WARN INFO PASS; do
     [ "$FAILS_ONLY" = 1 ] && [ "$sev" != FAIL ] && continue
     for i in "${!SEV[@]}"; do
       [ "${SEV[$i]}" = "$sev" ] || continue
@@ -223,6 +244,6 @@ else
       [ -n "${FIX[$i]}" ] && [ "$sev" != PASS ] && printf '     fix: %s\n' "${FIX[$i]}"
     done
   done
-  echo "Summary: $nf fail, $nw warning, $np pass. Nothing was changed."
+  echo "Summary: $nf fail, $nw warning$([ "$nu" -gt 0 ] && echo ", $nu check(s) could not run"), $np pass. Nothing was changed."
 fi
 exit "$rc"

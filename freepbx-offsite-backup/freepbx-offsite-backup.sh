@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FreePBX Off-Site Backup: Databases, Config, Voicemail and Prompts over rsync/SSH, Verified (v1.0.0) - from srvScripts.com
+# FreePBX Off-Site Backup: Databases, Config, Voicemail and Prompts over rsync/SSH, Verified (v1.0.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/freepbx-offsite-backup/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -18,6 +18,9 @@
 # (fwconsole stop), import asterisk.sql.gz and asteriskcdrdb.sql.gz, extract files.tar.gz from /, put astdb.sqlite3
 # back in /var/lib/asterisk, then fwconsole chown && fwconsole reload && fwconsole start.
 # Exit codes: 0 backup made and copy verified, 1 made but the copy or pruning failed, 2 backup failed, 3 bad option.
+# Version 1.0.1 (2026-10-17): a failed verification run, a database server that cannot be queried, a missing
+#   FreePBX database or a missing sqlite3 are now failures (1.0.0 could report success); no local pruning after a
+#   failed copy. Found in an independent review.
 # Version 1.0.0 (2026-10-17): first release. Tested on FreePBX 17.0.33 / Asterisk 22.11 (Debian 12): backup to a
 #   local folder and over rsync/SSH, verification, pruning, and a test restore of both databases and the files.
 set -uo pipefail
@@ -81,20 +84,34 @@ STAMP=$(date +%Y%m%d-%H%M%S); SET="$NAME_PREFIX-$STAMP"; D="$WORK/$SET.partial"
 mkdir -p "$D" || { echo "ERROR: cannot create $D" >&2; exit 2; }
 start=$(date +%s); err=0
 
-# 1. Databases (FreePBX config + call records), one consistent transaction each
+# 1. Databases (FreePBX config + call records), one consistent transaction each.
+# A failed query is an error, never "database absent". On FreePBX (/etc/freepbx.conf) both databases are required.
+FREEPBX=0; [ -f /etc/freepbx.conf ] && FREEPBX=1
+dblist=""; dbq=1
+if command -v mysql >/dev/null 2>&1; then
+  if dblist=$(mysql "${MA[@]}" -N -B -e "SHOW DATABASES" 2>>"$LOG"); then dbq=0
+  else fail "cannot query the database server (mysql exit $?): check that MariaDB/MySQL runs and MYSQL_ARGS"; err=1; fi
+elif [ "$FREEPBX" = 1 ]; then fail "mysql client not installed, cannot back up the FreePBX databases"; err=1; fi
 for db in asterisk asteriskcdrdb; do
-  if mysql "${MA[@]}" -N -B -e "SHOW DATABASES LIKE '$db'" 2>/dev/null | grep -qx "$db"; then
-    if mysqldump "${MA[@]}" --single-transaction --quick --routines --events --triggers --hex-blob --default-character-set=utf8mb4 --databases "$db" 2>>"$LOG" | gzip -6 > "$D/$db.sql.gz" \
-       && [ "$(zcat "$D/$db.sql.gz" | tail -1 | grep -c 'Dump completed')" = 1 ]; then log "database $db: $(du -h "$D/$db.sql.gz" | cut -f1)"
-    else fail "dump of $db failed"; err=1; fi
-  else log "database $db: not present, skipped"; fi
+  [ "$dbq" = 0 ] || continue
+  if ! grep -qx "$db" <<<"$dblist"; then
+    if [ "$FREEPBX" = 1 ]; then fail "database $db is missing on this FreePBX server"; err=1
+    else log "database $db: not present (plain Asterisk), skipped"; fi
+    continue
+  fi
+  if mysqldump "${MA[@]}" --single-transaction --quick --routines --events --triggers --hex-blob --default-character-set=utf8mb4 --databases "$db" 2>>"$LOG" | gzip -6 > "$D/$db.sql.gz" \
+     && [ "$(zcat "$D/$db.sql.gz" | tail -1 | grep -c 'Dump completed')" = 1 ]; then log "database $db: $(du -h "$D/$db.sql.gz" | cut -f1)"
+  else fail "dump of $db failed"; err=1; fi
 done
 
 # 2. astdb (call forwarding, DND, follow-me...) copied with sqlite3 so a half-written file is never saved
 if [ -f /var/lib/asterisk/astdb.sqlite3 ]; then
-  if command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 /var/lib/asterisk/astdb.sqlite3 ".backup '$D/astdb.sqlite3'" 2>>"$LOG" && log "astdb: copied" || { fail "astdb copy failed"; err=1; }
-  else cp -p /var/lib/asterisk/astdb.sqlite3 "$D/astdb.sqlite3" && log "astdb: copied with cp (install sqlite3 for a safe copy)"; fi
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    fail "sqlite3 is not installed, so astdb cannot be copied safely while Asterisk runs (apt install sqlite3 / dnf install sqlite)"; err=1
+  elif sqlite3 /var/lib/asterisk/astdb.sqlite3 ".backup '$D/astdb.sqlite3'" 2>>"$LOG" \
+       && [ "$(sqlite3 "$D/astdb.sqlite3" 'PRAGMA integrity_check' 2>>"$LOG")" = ok ]; then
+    log "astdb: copied ($(sqlite3 "$D/astdb.sqlite3" 'SELECT COUNT(*) FROM astdb' 2>/dev/null) keys, integrity ok)"
+  else fail "astdb copy failed or did not pass the integrity check"; err=1; fi
 fi
 
 # 3. Files
@@ -139,9 +156,12 @@ if [ "$REMOTE" = 1 ]; then
   RS=(rsync -a --partial --timeout=120 -e "${SSH[*]}"); [ "$BWLIMIT" -gt 0 ] && RS+=(--bwlimit="$BWLIMIT")
   rpath=${DEST#*:}; rpath=${rpath%/}
   if "${RS[@]}" "$D/" "$DEST/$SET.partial/" 2>>"$LOG"; then
-    # verification: a checksum dry run must find nothing left to send
-    diffs=$("${RS[@]}" --checksum --dry-run --itemize-changes "$D/" "$DEST/$SET.partial/" 2>>"$LOG" | grep -c '^<f')
-    if [ "$diffs" = 0 ]; then
+    # verification: a checksum dry run must succeed AND find nothing left to send. A failed run is a failure,
+    # never "0 differences".
+    vout=$("${RS[@]}" --checksum --dry-run --itemize-changes "$D/" "$DEST/$SET.partial/" 2>>"$LOG"); vrc=$?
+    diffs=$(grep -v '^\.d' <<<"$vout" | grep -c . || true)
+    if [ "$vrc" -ne 0 ]; then fail "verification run failed (rsync exit $vrc); the copy is NOT verified"; copy_rc=1
+    elif [ "$diffs" = 0 ]; then
       if "${SSH[@]}" "${DEST%%:*}" "mv '$rpath/$SET.partial' '$rpath/$SET'" 2>>"$LOG"; then log "copied to $DEST/$SET and verified (checksums match)"
       else log "copied to $DEST/$SET.partial and verified (could not rename on the destination; restricted account?)"; fi
     else fail "verification found $diffs file(s) that differ on $DEST"; copy_rc=1; fi
@@ -151,9 +171,12 @@ else
     && mv "$DEST/$SET.partial" "$DEST/$SET" && log "copied to $DEST/$SET and verified (sha256sum -c)" || { fail "copy to $DEST failed"; copy_rc=1; }
 fi
 
-# 6. Retention (sets are folders named <prefix>-YYYYmmdd-HHMMSS)
+# 6. Retention (sets are folders named <prefix>-YYYYmmdd-HHMMSS). After a failed off-site copy nothing is pruned
+# locally, so the last good local sets stay available.
 prune_local() { local dir=$1; find "$dir" -maxdepth 1 -type d -name "$NAME_PREFIX-[0-9]*-[0-9]*" ! -name '*.partial' -printf '%f\n' | sort | head -n -"$KEEP"; }
-for old in $(prune_local "$WORK"); do rm -rf "${WORK:?}/$old" && log "pruned local $old"; done
+if [ "$copy_rc" = 0 ]; then
+  for old in $(prune_local "$WORK"); do rm -rf "${WORK:?}/$old" && log "pruned local $old"; done
+else log "local pruning skipped because the off-site copy failed"; fi
 if [ "$copy_rc" = 0 ] && [ "$REMOTE_KEEP" = 1 ]; then
   if [ "$REMOTE" = 1 ]; then
     if ! "${SSH[@]}" "${DEST%%:*}" "cd '$rpath' && ls -1d $NAME_PREFIX-[0-9]*-[0-9]* 2>/dev/null | grep -v partial | sort | head -n -$KEEP | while read -r o; do rm -rf -- \"\$o\" && echo \"pruned remote \$o\"; done" >> "$LOG" 2>&1; then

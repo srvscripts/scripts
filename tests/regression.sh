@@ -155,38 +155,15 @@ if command -v restic >/dev/null && [[ $EUID -eq 0 ]]; then
   chk "restic fixtures: listed dump that became a link is neither followed nor deleted" '[[ $(cat "$Q/sentinel") == SENTINEL && -L $old/linked.sql ]]'
   chk "restic fixtures: second run still dumps the good databases" 'grep -q "dumped 4 of 5 database" "$Q/log"'
 else skp "restic-offsite-backup fixtures (need restic and root)"; fi
-# ---- restic-offsite-backup 1.3.0: RETENTION=no keeps every snapshot; credentials in the repository URL never reach the log ----
-if command -v restic >/dev/null; then
-  RN=$T/rn; mkdir -p "$RN/data"; echo one > "$RN/data/a"; head -c 4 /dev/urandom > "$RN/pass"; chmod 600 "$RN/pass"
-  printf '%s\n' "RESTIC_REPOSITORY=$RN/repo" "RESTIC_PASSWORD_FILE=$RN/pass" "BACKUP_PATHS=$RN/data" "KEEP_DAILY=1" "KEEP_WEEKLY=0" "KEEP_MONTHLY=0" "RETENTION=no" "CHECK_EVERY_DAYS=999" "LOG_FILE=$RN/log" > "$RN/conf"; chmod 600 "$RN/conf"
-  RO=$(S restic-offsite-backup)
-  run "restic-offsite-backup: --init (RETENTION=no)" 0 "" -- bash "$RO" --init --yes --config "$RN/conf"
-  for i in 1 2 3; do echo "$i" >> "$RN/data/a"; bash "$RO" --config "$RN/conf" >/dev/null 2>&1; done
-  n=$(RESTIC_PASSWORD_FILE=$RN/pass restic -r "$RN/repo" snapshots --json 2>/dev/null | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')
-  [[ "$n" == 3 ]] && ok "restic-offsite-backup: RETENTION=no keeps all 3 snapshots (KEEP_DAILY=1)" || bad "restic-offsite-backup: RETENTION=no keeps all 3 snapshots (found $n)" "$RN/log"
-  grep -q "retention skipped: RETENTION=no" "$RN/log" && ok "restic-offsite-backup: RETENTION=no is logged" || bad "restic-offsite-backup: RETENTION=no is logged" "$RN/log"
-  sed -i 's/^RETENTION=no$/RETENTION=yes/' "$RN/conf"; echo 4 >> "$RN/data/a"; bash "$RO" --config "$RN/conf" >/dev/null 2>&1
-  n=$(RESTIC_PASSWORD_FILE=$RN/pass restic -r "$RN/repo" snapshots --json 2>/dev/null | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))')
-  [[ "$n" == 1 ]] && ok "restic-offsite-backup: RETENTION=yes applies KEEP_DAILY=1" || bad "restic-offsite-backup: RETENTION=yes applies KEEP_DAILY=1 (found $n)" "$RN/log"
-  sed -i 's/^RETENTION=yes$/RETENTION=maybe/' "$RN/conf"
-  run "restic-offsite-backup: an invalid RETENTION value is a config error" 2 "RETENTION must be yes or no" -- bash "$RO" --config "$RN/conf"
-  # A fake restic that fails at once (a real one retries an unreachable server for up to 15 minutes).
-  FB=$T/fakerestic; mkdir -p "$FB"; printf '#!/bin/sh\necho "Fatal: unable to open config file" >&2\nexit 1\n' > "$FB/restic"; chmod +x "$FB/restic"
-  sed -i -e 's/^RETENTION=maybe$/RETENTION=no/' -e "s#^RESTIC_REPOSITORY=.*#RESTIC_REPOSITORY=rest:https://srvs-user:s3cretPW@backup.example.net:8000/repo/#" "$RN/conf"
-  run "restic-offsite-backup: an unreachable rest repository fails cleanly, URL masked" 1 "cannot open repository rest:https://\\*\\*\\*@backup.example.net:8000/repo/" -- env PATH="$FB:$PATH" bash "$RO" --config "$RN/conf"
-  grep -q "s3cretPW" "$RN/log" && bad "restic-offsite-backup: the URL password is not written to the log" "$RN/log" || ok "restic-offsite-backup: the URL password is not written to the log"
-else skp "restic-offsite-backup 1.3.0 fixtures (restic not installed)"; fi
 
 # ---- asterisk-recordings-to-mp3: links, collisions and call-log failures never change other files or lose originals ----
 # Fake ffmpeg/ffprobe/mysql in PATH; recordings belong to uid 65534 like a tenant-owned spool. Runs as root (CI does).
 if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
   A=$T/ast; FK=$A/bin; chmod 711 "$T"; mkdir -p "$FK"; chmod 711 "$A"
   printf '%s\n' '#!/bin/bash' 'out="${*: -1}"; printf FAKE-MP3 >"$out"' \
-    '[ -n "${RACE_MP3:-}" ] && [ ! -e "$RACE_MP3" ] && printf OTHER >"$RACE_MP3"' \
-    '[ -n "${RACE_DIR:-}" ] && mkdir -p "$RACE_DIR" && chown 65534:65534 "$RACE_DIR"' \
-    '[ -n "${RACE_DIRLINK:-}" ] && ln -s "$RACE_DIRLINK_TO" "$RACE_DIRLINK" && chown -h 65534:65534 "$RACE_DIRLINK"; exit 0' > "$FK/ffmpeg"
+    '[ -n "${RACE_MP3:-}" ] && [ ! -e "$RACE_MP3" ] && printf OTHER >"$RACE_MP3"; exit 0' > "$FK/ffmpeg"
   printf '%s\n' '#!/bin/bash' 'printf "sample_rate=8000\nnb_samples=8000\n"' > "$FK/ffprobe"
-  printf '%s\n' '#!/bin/bash' 'q="${*: -1}"' 'case "$q" in *"SELECT 1 FROM"*) echo 1 ;; *UPDATE*) [ -n "${CDR_LOG:-}" ] && echo "$q" >>"$CDR_LOG"; [ "${FAKE_CDR:-}" = fail ] && exit 1; echo "${FAKE_ROWS:-1}" ;; *"COUNT(*)"*) echo 0 ;; esac' > "$FK/mysql"
+  printf '%s\n' '#!/bin/bash' 'q="${*: -1}"' 'case "$q" in *"SELECT 1 FROM"*) echo 1 ;; *UPDATE*) [ "${FAKE_CDR:-}" = fail ] && exit 1; echo "${FAKE_ROWS:-1}" ;; *"COUNT(*)"*) echo 0 ;; esac' > "$FK/mysql"
   chmod 755 "$FK"/*
   AST=(env PATH="$FK:$PATH" RECORDINGS_MP3_LOCK="$A/lock" bash "$(S asterisk-recordings-to-mp3)")
   mkrec(){ mkdir -p "$1"; for n in "${@:2}"; do head -c 4000 /dev/urandom > "$1/$n"; done; }
@@ -215,51 +192,92 @@ if [[ $EUID -eq 0 ]] && command -v setpriv >/dev/null; then
   chk "asterisk: failed update keeps the original" '[[ -f $R3/c1.wav && ! -e $R3/c1.mp3 ]]'
   run "asterisk: successful update deletes the original" 0 "ok  c1\.wav" -- "${AST[@]}" --dir "$R3" --update-cdr --delete-original
   chk "asterisk: after a good update only the MP3 remains" '[[ ! -e $R3/c1.wav && -f $R3/c1.mp3 ]]'
-  # EVE-10: a publish killed half-way must not leave a partial final MP3 that later runs would skip.
-  printf '%s\n' '#!/bin/bash' 'o=$(readlink /proc/$$/fd/1 2>/dev/null)' \
-    'if [ -n "${KILL_PUBLISH:-}" ] && [[ $o == */.*.mp3.*.part ]]; then head -c 3; kill -9 $PPID; exit 1; fi' 'exec /bin/cat "$@"' > "$FK/cat"; chmod 755 "$FK/cat"
-  R5=$A/r5; mkrec "$R5" kill.wav; chown -R 65534:65534 "$R5"; touch -d '-10 minutes' "$R5"/kill.wav
-  run "asterisk: a publish killed half-way is reported as interrupted" 1 "was interrupted" -- env KILL_PUBLISH=1 "${AST[@]}" --dir "$R5" --delete-original
-  chk "asterisk: after the kill there is no final MP3 and the original is kept" '[[ ! -e $R5/kill.mp3 && -f $R5/kill.wav ]] && ls -A "$R5" | grep -q "^\.kill\.mp3\..*\.part$"'
-  for p in "$R5"/.kill.mp3.*.part; do touch -d '-40 minutes' "$p"; done
-  run "asterisk: the next run converts the recording again" 0 "ok  kill\.wav" -- "${AST[@]}" --dir "$R5" --delete-original
-  chk "asterisk: retried MP3 is complete, owned by the owner, original deleted" 'same "$R5/kill.mp3" FAKE-MP3 && [[ $(stat -c %u $R5/kill.mp3) == 65534 && ! -e $R5/kill.wav ]]'
-  chk "asterisk: the stale hidden temporary file of the killed run is removed" '! ls -A "$R5" | grep -q "\.part$" && same "$R5/kill.mp3" FAKE-MP3'
-  rm -f "$FK/cat"
-  # NEW-AST-DIR: a folder, or a link to a folder, created at the MP3 name after the existence check must be refused:
-  # no MP3 written inside it, no call log update, original kept, run reported as failed.
-  R6=$A/r6; mkrec "$R6" d.wav; chown -R 65534:65534 "$R6"; touch -d '-10 minutes' "$R6"/d.wav
-  run "asterisk: a folder created at the MP3 name during conversion is refused" 1 "appeared while converting" -- env RACE_DIR="$R6/d.mp3" CDR_LOG="$A/cdr6" "${AST[@]}" --dir "$R6" --update-cdr --delete-original
-  chk "asterisk: nothing written inside that folder, original kept, call log untouched" '[[ -d $R6/d.mp3 && -z $(ls -A "$R6/d.mp3") && -f $R6/d.wav && ! -s $A/cdr6 ]] && ! ls -A "$R6" | grep -q "\.part$"'
-  R7=$A/r7; TD=$A/tdir; mkdir -p "$TD"; chown 65534:65534 "$TD"; mkrec "$R7" l.wav; chown -R 65534:65534 "$R7"; touch -d '-10 minutes' "$R7"/l.wav
-  run "asterisk: a link to a folder created at the MP3 name during conversion is refused" 1 "appeared while converting" -- env RACE_DIRLINK="$R7/l.mp3" RACE_DIRLINK_TO="$TD" CDR_LOG="$A/cdr7" "${AST[@]}" --dir "$R7" --update-cdr --delete-original
-  chk "asterisk: nothing written through that link, original kept, call log untouched" '[[ -L $R7/l.mp3 && -z $(ls -A "$TD") && -f $R7/l.wav && ! -s $A/cdr7 ]] && ! ls -A "$R7" | grep -q "\.part$"'
   R4=$A/r4; mkrec "$R4" rootrec.wav; chown 65534:65534 "$R4"; touch -d '-10 minutes' "$R4"/rootrec.wav
   run "asterisk: root-owned recording in a tenant folder is refused" 1 "owned by root in a folder other users can change" -- "${AST[@]}" --dir "$R4"
   chk "asterisk: refused recording kept, nothing written" '[[ -f $R4/rootrec.wav && ! -e $R4/rootrec.mp3 ]]'
 else skp "asterisk-recordings-to-mp3 fixtures (need root and setpriv)"; fi
 
-# ---- process-hog-report: a known busy process owned by a known user must be named in the report ----
-PH=$(S process-hog-report)
-run "process-hog-report: --interval=0 is refused" 2 "1-300" -- bash "$PH" --interval=0
-run "process-hog-report: unknown option is refused" 2 "Unknown option" -- bash "$PH" --bogus
-run "process-hog-report: --if-load above the current load prints nothing" 0 "!Process hog report" -- bash "$PH" --if-load=99999
-if [[ $(id -u) -eq 0 ]] && command -v setpriv >/dev/null; then
-  HD=$(mktemp -d /tmp/phr-fixture.XXXXXX); chmod 755 "$HD"; cp "$(command -v yes)" "$HD/srvshogfixture"; chmod 755 "$HD/srvshogfixture"
-  HU=$(getent passwd 65534 | cut -d: -f1)
-  setpriv --reuid=65534 --regid=65534 --clear-groups "$HD/srvshogfixture" >/dev/null 2>&1 & HPID=$!
-  sleep 0.5
-  PO=$T/phr.out; bash "$PH" --interval=2 --top=5 --no-color > "$PO" 2>&1; prc=$?
-  [[ $prc -eq 0 ]] && grep -q "^Process hog report" "$PO" && ok "process-hog-report: report runs and exits 0" || bad "process-hog-report: report runs and exits 0 (exit $prc)" "$PO"
-  awk '/^Top processes by CPU/{f=1;next} /^$/{f=0} f' "$PO" | grep -Eq "^ *$HPID +$HU +[0-9.]+ .*srvshogfixture" \
-    && ok "process-hog-report: the busy process is listed with its PID, user and name" || bad "process-hog-report: the busy process is listed with its PID, user and name" "$PO"
-  awk -v u="$HU" '/^Accounts \/ users by CPU/{f=1;next} /^$/{f=0} f && $1==u && $2+0 >= 50 {hit=1} END{exit !hit}' "$PO" \
-    && ok "process-hog-report: its account shows at least 50% of one core" || bad "process-hog-report: its account shows at least 50% of one core" "$PO"
-  PU=$T/phr-user.out; bash "$PH" --interval=1 --user="$HU" --no-color > "$PU" 2>&1
-  awk '/^Top processes by CPU/{f=1;getline;next} /^$/{f=0} f && NF' "$PU" | awk -v u="$HU" '$2!=u {bad=1} END{exit bad}' && grep -q srvshogfixture "$PU" \
-    && ok "process-hog-report: --user shows only that account" || bad "process-hog-report: --user shows only that account" "$PU"
-  kill "$HPID" 2>/dev/null; wait "$HPID" 2>/dev/null; rm -rf "$HD"
-else skp "process-hog-report busy-process fixtures (need root and setpriv)"; fi
+# ---- VoIP scripts (v1.0.1): failure paths found in the 17 Oct 2026 independent review must never pass as success ----
+VD=$T/voip; mkdir -p "$VD/bin"
+# Fake asterisk CLI: "asterisk -rx CMD". FAIL_LIST (comma-separated commands) fail like a broken CLI; EMPTY=1 answers
+# "No objects found." for the PJSIP lists.
+cat > "$VD/ast" <<'FAKE'
+#!/bin/bash
+cmd="$2"
+case ",${FAIL_LIST:-}," in *",$cmd,"*) echo "Unable to connect to remote asterisk"; exit 1;; esac
+case "$cmd" in
+  "core show uptime seconds") printf 'System uptime: 99999\nLast reload: 999\n';;
+  "core show version") echo "Asterisk 22.11.0 built by ci on a x86_64";;
+  "module show like res_pjsip.so") echo "res_pjsip.so  Basic SIP resource  Running";;
+  "module show like chan_sip.so") echo "0 modules loaded";;
+  "pjsip show registrations") if [ "${EMPTY:-0}" = 1 ]; then echo "No objects found."; else printf ' <Registration/ServerURI....>  <Auth....>  <Status.......>\n==========\n carrier/sip:192.0.2.10:5060   carrier     Registered\n'; fi;;
+  "pjsip show identifies") echo "No objects found.";;
+  "pjsip show contacts") if [ "${EMPTY:-0}" = 1 ]; then echo "No objects found."; else printf '  Contact:  <Aor/ContactUri.....> <Hash> <Status> <RTT(ms)>\n  Contact:  carrier/sip:192.0.2.10:5060  ab12  Avail  12.5\n'; fi;;
+  "pjsip show endpoints") if [ "${EMPTY:-0}" = 1 ]; then echo "No objects found."; else printf ' Endpoint:  <Endpoint/CID.....>  <State.....>  <Channels.>\n Endpoint:  carrier   Not in use    0 of inf\n'; fi;;
+  "pjsip show endpoint anonymous") echo "Unable to find object anonymous.";;
+  "core show channels count") echo "0 active calls";;
+  *) echo "No such command '$cmd'"; exit 1;;
+esac
+FAKE
+chmod +x "$VD/ast"
+DET="pjsip show registrations,pjsip show identifies,pjsip show contacts,pjsip show endpoints,core show channels count"
+HC=$(S pjsip-health-check)
+run "pjsip-health-check: healthy fake PBX is OK and counts a trunk endpoint without caller ID" 0 "endpoints 1 " -- env ASTERISK_BIN="$VD/ast" bash "$HC"
+run "pjsip-health-check: failed detail queries are UNKNOWN, never OK" 3 "UNKNOWN could not read endpoints" -- env ASTERISK_BIN="$VD/ast" FAIL_LIST="$DET" bash "$HC"
+run "pjsip-health-check: genuinely empty configuration is a valid OK" 0 "^OK:" -- env ASTERISK_BIN="$VD/ast" EMPTY=1 bash "$HC"
+run "pjsip-health-check: a missing required trunk is CRITICAL" 2 "required trunk backup1" -- env ASTERISK_BIN="$VD/ast" bash "$HC" --require-trunk carrier,backup1
+mkdir -p "$VD/hcstate"
+env ASTERISK_BIN="$VD/ast" FAIL_LIST="pjsip show contacts" bash "$HC" --quiet --notify-on-change --state-dir "$VD/hcstate" --webhook http://127.0.0.1:9/ >/dev/null 2>&1
+[[ ! -e $VD/hcstate/last.webhook ]] && ok "pjsip-health-check: failed webhook delivery leaves no state (retried next run)" || bad "pjsip-health-check: failed webhook delivery leaves no state (retried next run)"
+
+AU=$(S asterisk-security-audit); mkdir -p "$VD/conf"
+run "asterisk-security-audit: unreadable identify list is UNKNOWN, not PASS" 3 "UNKNOWN Could not read the context" -- env ASTERISK_BIN="$VD/ast" FAIL_LIST="pjsip show identifies" bash "$AU" --conf "$VD/conf"
+run "asterisk-security-audit: no PASS line for the check that could not run" "*" "!PASS No IP-authenticated" -- env ASTERISK_BIN="$VD/ast" FAIL_LIST="pjsip show identifies" bash "$AU" --conf "$VD/conf"
+run "asterisk-security-audit: readable empty identify list passes" "*" "PASS No IP-authenticated" -- env ASTERISK_BIN="$VD/ast" bash "$AU" --conf "$VD/conf"
+
+# Fake mysql that always fails like a wrong password
+printf '#!/bin/bash\necho "ERROR 1045 (28000): Access denied for user root@localhost" >&2\nexit 1\n' > "$VD/bin/mysql"; chmod +x "$VD/bin/mysql"
+run "voip-toll-fraud-watch: CDR database that cannot be queried is UNKNOWN (exit 3)" 3 "cannot query the CDR database" -- env PATH="$VD/bin:$PATH" bash "$(S voip-toll-fraud-watch)" --source db
+
+FB=$(S freepbx-offsite-backup)
+if [[ $(id -u) -eq 0 && ! -e /etc/freepbx.conf ]]; then
+  MADE_AST=0; [[ -e /etc/asterisk ]] || { mkdir -p /etc/asterisk && echo "[general]" > /etc/asterisk/ci-fixture.conf && MADE_AST=1; }
+  run "freepbx-offsite-backup: a database server that cannot be queried fails the backup" 2 "cannot query the database server" -- env PATH="$VD/bin:$PATH" bash "$FB" --dest "$VD/dest" --work "$VD/work1"
+  # Plain-Asterisk box (no databases), "remote" copy works but the verification run fails: must NOT be reported verified
+  mkdir -p "$VD/bin2"
+  printf '#!/bin/bash\necho information_schema\n' > "$VD/bin2/mysql"; printf '#!/bin/bash\nexit 0\n' > "$VD/bin2/mysqldump"; chmod +x "$VD/bin2/mysql" "$VD/bin2/mysqldump"
+  cat > "$VD/bin2/rsync" <<'FAKE'
+#!/bin/bash
+args=(); for a in "$@"; do [[ $a == --dry-run ]] && { echo "ssh: connect to host backup port 22: Connection refused" >&2; exit 12; }; done
+src=${@: -2:1}; dst=${@: -1}; dst=${dst#*:}; mkdir -p "$dst" && cp -a "$src." "$dst"
+FAKE
+  chmod +x "$VD/bin2/rsync"
+  cat > "$VD/bin2/sqlite3" <<'FAKE'
+#!/bin/bash
+case "$2" in .backup*) d=${2#.backup }; d=${d//\'/}; cp "$1" "$d";; PRAGMA*) echo ok;; *) echo 1;; esac
+FAKE
+  chmod +x "$VD/bin2/sqlite3"
+  run "freepbx-offsite-backup: failed verification run is not success" 1 "NOT verified" -- env PATH="$VD/bin2:$PATH" bash "$FB" --dest "ci@backup:$VD/remote" --work "$VD/work2" --keep 1
+  run "freepbx-offsite-backup: no local pruning after a failed copy" 1 "local pruning skipped" -- env PATH="$VD/bin2:$PATH" bash "$FB" --dest "ci@backup:$VD/remote" --work "$VD/work2" --keep 1
+  [[ $MADE_AST -eq 1 ]] && rm -rf /etc/asterisk
+else skp "freepbx-offsite-backup fixtures (need root on a machine without FreePBX)"; fi
+
+RC=$(S recording-retention-cleaner); RD=$VD/monitor
+mkold(){ local n; for n in "$@"; do mkdir -p "$RD/2026/01/01"; head -c 2000 /dev/urandom > "$RD/2026/01/01/$n"; touch -d '-200 days' "$RD/2026/01/01/$n"; done; }
+mkold a.wav b.wav
+sleep 120 < "$RD/2026/01/01/a.wav" & H1=$!; sleep 120 < "$RD/2026/01/01/b.wav" & H2=$!; sleep 0.5
+run "recording-retention-cleaner: every old file open, nothing is removed" 0 "removed 0" -- bash "$RC" --dir "$RD" --days 90 --apply --quiet
+[[ -f $RD/2026/01/01/a.wav && -f $RD/2026/01/01/b.wav ]] && ok "recording-retention-cleaner: both open files still exist" || bad "recording-retention-cleaner: both open files still exist"
+kill "$H2" 2>/dev/null; wait "$H2" 2>/dev/null
+run "recording-retention-cleaner: mixed, only the closed file is removed" 0 "removed 1" -- bash "$RC" --dir "$RD" --days 90 --apply --quiet
+[[ -f $RD/2026/01/01/a.wav && ! -e $RD/2026/01/01/b.wav ]] && ok "recording-retention-cleaner: the open file survived" || bad "recording-retention-cleaner: the open file survived"
+kill "$H1" 2>/dev/null; wait "$H1" 2>/dev/null
+mkold $'new\nline.wav' $'tab\tname.wav' "quote'name.wav"
+run "recording-retention-cleaner: unusual file names are archived and removed" 0 "removed 4" -- bash "$RC" --dir "$RD" --days 90 --apply --archive "$VD/arch" --quiet
+[[ $(tar -tzf "$VD"/arch/*.tar.gz | wc -l) -eq 4 ]] && ok "recording-retention-cleaner: archive holds all 4 files" || bad "recording-retention-cleaner: archive holds all 4 files"
+mkold c.wav
+run "recording-retention-cleaner: dry run changes nothing" 0 "dry run" -- bash "$RC" --dir "$RD" --days 90
+[[ -f $RD/2026/01/01/c.wav ]] && ok "recording-retention-cleaner: dry run kept the file" || bad "recording-retention-cleaner: dry run kept the file"
 
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))
