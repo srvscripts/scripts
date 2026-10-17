@@ -265,7 +265,7 @@ else skp "freepbx-offsite-backup fixtures (need root on a machine without FreePB
 RC=$(S recording-retention-cleaner); RD=$VD/monitor
 mkold(){ local n; for n in "$@"; do mkdir -p "$RD/2026/01/01"; head -c 2000 /dev/urandom > "$RD/2026/01/01/$n"; touch -d '-200 days' "$RD/2026/01/01/$n"; done; }
 mkold a.wav b.wav
-sleep 120 < "$RD/2026/01/01/a.wav" & H1=$!; sleep 120 < "$RD/2026/01/01/b.wav" & H2=$!; sleep 0.5
+tail -f -- "$RD/2026/01/01/a.wav" >/dev/null 2>&1 & H1=$!; tail -f -- "$RD/2026/01/01/b.wav" >/dev/null 2>&1 & H2=$!; sleep 0.5
 run "recording-retention-cleaner: every old file open, nothing is removed" 0 "removed 0" -- bash "$RC" --dir "$RD" --days 90 --apply --quiet
 [[ -f $RD/2026/01/01/a.wav && -f $RD/2026/01/01/b.wav ]] && ok "recording-retention-cleaner: both open files still exist" || bad "recording-retention-cleaner: both open files still exist"
 kill "$H2" 2>/dev/null; wait "$H2" 2>/dev/null
