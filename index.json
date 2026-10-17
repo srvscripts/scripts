@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-17T15:17:29+00:00",
+    "generated": "2026-10-17T16:17:57+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -380,10 +380,10 @@
             "title": "PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords",
             "file": "pbx-support-bundle.sh",
             "url": "https://scr.srvscripts.com/pbx-support-bundle/pbx-support-bundle.sh",
-            "sha256": "b5587983d1c368e31d08d2630a28d59d520e13e1bbad038bcd7668e070dc3fa6",
+            "sha256": "6ac5403486670182d4d0276927678c6c1fb281d5d97ea67c37d7d795a33ae4c4",
             "page": "https://srvscripts.com/scripts/pbx-support-bundle/",
             "language": "Bash",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "updated": "2026-10-17",
             "summary": "A Bash script that collects what a consultant or your SIP provider asks for (versions, PJSIP transports, endpoints, registrations, selected configs and recent logs) into a private archive, with passwords, digest values, keys, e-mail addresses, public IPs and phone numbers masked. Nothing is uploaded."
         },
@@ -488,10 +488,10 @@
             "title": "SIP TLS Certificate Check for Asterisk and FreePBX (TLS and WSS)",
             "file": "sip-tls-cert-check.sh",
             "url": "https://scr.srvscripts.com/sip-tls-certificate-check/sip-tls-cert-check.sh",
-            "sha256": "461fdb47e9620049954e9f52e3435ace107132f5943817a0be69f028cce99c95",
+            "sha256": "200410d6d2b550bd8f742c8e08b0ee8779dd0507f6bc9aef2edbeeaa8d5ff858",
             "page": "https://srvscripts.com/scripts/sip-tls-certificate-check/",
             "language": "Bash",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "updated": "2026-10-17",
             "summary": "A read-only Bash script that checks every SIP TLS certificate an Asterisk or FreePBX server uses (PJSIP TLS transports and the WSS server WebRTC phones connect to): days left, host name, chain, private key, and whether Asterisk still serves an old certificate after a renewal."
         },

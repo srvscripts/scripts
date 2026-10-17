@@ -280,6 +280,7 @@ run "recording-retention-cleaner: dry run changes nothing" 0 "dry run" -- bash "
 [[ -f $RD/2026/01/01/c.wav ]] && ok "recording-retention-cleaner: dry run kept the file" || bad "recording-retention-cleaner: dry run kept the file"
 
 
+
 # ---- sip-tls-cert-check: local TLS servers stand in for Asterisk (no Asterisk needed; nothing is changed) ----
 TC="$ROOT/sip-tls-certificate-check/sip-tls-cert-check.sh"
 if command -v openssl >/dev/null && [[ -f $TC ]]; then
@@ -339,6 +340,29 @@ if command -v openssl >/dev/null && [[ -f $TC ]]; then
     tls client client client client
     run "sip-tls-cert-check: certificate not allowed for TLS servers is a warning" 1 "not allowed for TLS server use" -- "${TCR[@]}" --ca "$K/ca.pem"
   else bad "sip-tls-cert-check: could not build the chain fixtures (openssl ca)"; fi
+  # 1.0.2: certificate and key in one PEM file (FreePBX tlscertfile without tlsprivatekey), encrypted key, client certificate required
+  cmb(){ # served-cert served-key combined-file
+    printf 'tlsenable=yes\ntlsbindaddr=127.0.0.1:18089\ntlscertfile=%s\n' "$3" > "$K/conf/http_custom.conf"
+    [[ -n "${TLSPID:-}" ]] && { kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null; }
+    openssl s_server -quiet -accept 127.0.0.1:18089 -cert "$K/$1.pem" -key "$K/$2.key" -www >/dev/null 2>&1 & TLSPID=$!; sleep 1; }
+  cat "$K/good.pem" "$K/good.key" > "$K/both-ok.pem"; cat "$K/good.pem" "$K/renewed.key" > "$K/both-bad.pem"
+  cmb good good "$K/both-ok.pem"
+  run "sip-tls-cert-check: certificate and matching key in one PEM is OK" 0 "^OK: 1 TLS" -- "${TCR[@]}" --ca "$K/ca.pem"
+  cmb good good "$K/both-bad.pem"
+  run "sip-tls-cert-check: certificate and a different key in one PEM is critical" 2 "private key in .*does not belong" -- "${TCR[@]}" --ca "$K/ca.pem"
+  cp "$K/good.pem" "$K/both-none.pem"; cmb good good "$K/both-none.pem"
+  run "sip-tls-cert-check: one PEM without a private key is critical" 2 "no private key found" -- "${TCR[@]}" --ca "$K/ca.pem"
+  openssl pkey -in "$K/good.key" -aes256 -passout pass:fixture -out "$K/enc.key" 2>/dev/null
+  printf 'tlsenable=yes\ntlsbindaddr=127.0.0.1:18089\ntlscertfile=%s\ntlsprivatekey=%s\n' "$K/good.pem" "$K/enc.key" > "$K/conf/http_custom.conf"
+  run "sip-tls-cert-check: encrypted key is reported, not waited on" 1 "is encrypted" -- timeout 60 "${TCR[@]}" --ca "$K/ca.pem"
+  kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null
+  openssl s_server -quiet -accept 127.0.0.1:18090 -cert "$K/good.pem" -key "$K/good.key" -CAfile "$K/ca.pem" -Verify 1 -www >/dev/null 2>&1 & TLSPID=$!; sleep 1
+  run "sip-tls-cert-check: server that requires a client certificate is not OK" 1 "asks for a client certificate" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T" --check 127.0.0.1:18090 --name pbx.test --ca "$K/ca.pem"
+  run "sip-tls-cert-check: JSON separates certificate validity from the handshake" 1 '"certificate_valid":true,"handshake_complete":false' -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T" --check 127.0.0.1:18090 --name pbx.test --ca "$K/ca.pem" --json
+  kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null
+  openssl s_server -quiet -accept 127.0.0.1:18090 -cert "$K/good.pem" -key "$K/good.key" -CAfile "$K/ca.pem" -Verify 1 -no_tls1_3 -www >/dev/null 2>&1 & TLSPID=$!; sleep 1
+  run "sip-tls-cert-check: client certificate required over TLS 1.2 is not OK either" 1 "asks for a client certificate|did not complete" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T" --check 127.0.0.1:18090 --name pbx.test --ca "$K/ca.pem"
+  kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null; TLSPID=""
   tls good good good good 18099
   run "sip-tls-cert-check: nothing listening is critical" 2 "no TLS handshake" -- "${TCR[@]}" --ca "$K/ca.pem"
   kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null
@@ -412,6 +436,60 @@ LOG
   mkdir -p "$B/badtar"; printf '#!/bin/sh\necho "synthetic archive failure" >&2\nexit 2\n' > "$B/badtar/tar"; chmod +x "$B/badtar/tar"
   run "pbx-support-bundle: a failed archive is an error (exit 2), not OK" 2 "archive could not be created" -- env PATH="$B/badtar:$PATH" ASTERISK_BIN="$B/bin/asterisk" bash "$PB" --conf "$B/conf" --logdir "$B/log" --out "$B/out5"
   ls "$B"/out5/*.tar.gz >/dev/null 2>&1 && bad "pbx-support-bundle: no archive left after a failed tar" || ok "pbx-support-bundle: no archive left after a failed tar"
+  # ---- 1.0.2: SDP keys, spaced FreePBX variable, scan failures, README, archive name collisions ----
+  C=$T/bundle2; mkdir -p "$C/conf" "$C/log" "$C/o1" "$C/o2"
+  printf '[admin]\nsecret=aa FixtureSpacedCredential\n' > "$C/conf/manager_custom.conf"
+  cat > "$C/log/full" <<'LOG'
+<--- Received SIP request (1146 bytes) from PJSIP/1001 --->
+INVITE sip:1002@pbx.test SIP/2.0
+Content-Type: application/sdp
+
+v=0
+o=- 1 1 IN IP4 10.0.0.5
+s=-
+c=IN IP4 10.0.0.5
+t=0 0
+m=audio 12000 RTP/SAVP 0
+a=crypto:1 AES_CM_128_HMAC_SHA1_80 inline:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFB|2^20|1:1;inline:QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJC|2^20|2:1
+a=crypto:2 AES_CM_128_HMAC_SHA1_32 inline:Q0NDQ0NDQ0NDQ0NDQ0ND FEC_KEY=inline:RkVDS0VZRkVDS0VZRkVD
+a=key-mgmt:mikey AQAFgM0XflABAAAAAAAAAAAAAAsAyOuzAAAA
+k=base64:c2VjcmV0a2V5Zml4dHVyZQ==
+a=ice-ufrag:abcd
+a=ice-pwd:SyntheticICEPasswordAbc
+[2026-10-16 20:02:14] VERBOSE[2] pbx_variables.c: Setting global variable 'AMPMGRPASS' to 'aa FixtureSpacedCredential'
+LOG
+  PBC=(env ASTERISK_BIN="$B/bin/asterisk" bash "$PB" --conf "$C/conf" --logdir "$C/log")
+  run "pbx-support-bundle: SDES, FEC, MIKEY, k= and ICE keys in a SIP trace are masked (exit 0)" 0 "SRTP/ICE key" -- "${PBC[@]}" --out "$C/o1"
+  CD1=$(ls -d "$C"/o1/pbx-support-*/ 2>/dev/null | head -1); CD1=${CD1%/}
+  if [[ -n $CD1 && -f $CD1.tar.gz ]]; then
+    X=$C/x1; mkdir -p "$X"; tar -xzf "$CD1.tar.gz" -C "$X"
+    grep -rqE 'QUFBQUFB|QkJCQkJC|Q0NDQ0ND|RkVDS0VZ|AQAFgM0X|c2VjcmV0a2V5|SyntheticICEPassword|FixtureSpacedCredential' "$CD1" "$X" \
+      && bad "pbx-support-bundle: no SRTP/ICE key or password suffix in the folder or the archive" "$CD1/logs/asterisk-full-tail.log" || ok "pbx-support-bundle: no SRTP/ICE key or password suffix in the folder or the archive"
+    grep -q "to '\*\*\*\*\*\*\*\*'" "$CD1/logs/asterisk-full-tail.log" && ok "pbx-support-bundle: spaced FreePBX variable value masked whole" || bad "pbx-support-bundle: spaced FreePBX variable value masked whole" "$CD1/logs/asterisk-full-tail.log"
+    grep -q 'ice-ufrag:abcd' "$CD1/logs/asterisk-full-tail.log" && ok "pbx-support-bundle: non-secret SDP lines are kept" || bad "pbx-support-bundle: non-secret SDP lines are kept"
+  else bad "pbx-support-bundle: no archive for the SDP key test"; fi
+  # --pack must fail closed: scanner error, README.txt content, a folder or link where the archive should go
+  P1=$C/p1; mkdir -p "$P1/logs" "$P1/scan.txt"; echo 'password=FixtureMustNotBePacked' > "$P1/logs/data.txt"
+  run "pbx-support-bundle: --pack with scan.txt as a folder stops (exit 2), no archive" 2 "not a plain file" -- bash "$PB" --pack "$P1"
+  [[ ! -e $P1.tar.gz ]] && ok "pbx-support-bundle: no archive after a failed scan" || bad "pbx-support-bundle: no archive after a failed scan"
+  P2=$C/p2; mkdir -p "$P2"; echo 'note'> "$P2/a.txt"; echo 'secret=FixtureMustNotBePacked' > "$P2/README.txt"
+  run "pbx-support-bundle: --pack scans README.txt too (exit 1)" 1 "still look sensitive" -- bash "$PB" --pack "$P2"
+  [[ ! -e $P2.tar.gz ]] && grep -q 'README.txt:1: assignment' "$P2/scan.txt" && ! grep -q FixtureMustNotBePacked "$P2/scan.txt" \
+    && ok "pbx-support-bundle: README.txt finding listed without its value, no archive" || bad "pbx-support-bundle: README.txt finding listed without its value, no archive" "$P2/scan.txt"
+  P3=$C/p3; mkdir -p "$P3"; echo 'clean' > "$P3/a.txt"; echo 'secret=FixtureMustNotBePacked' > "$P3/b.txt"; chmod 000 "$P3/b.txt"
+  if [[ $(id -u) != 0 ]]; then
+    run "pbx-support-bundle: --pack with an unreadable file stops (exit 2)" 2 "scan failed" -- bash "$PB" --pack "$P3"
+    [[ ! -e $P3.tar.gz ]] && ok "pbx-support-bundle: no archive when a file cannot be scanned" || bad "pbx-support-bundle: no archive when a file cannot be scanned"
+  else skp "pbx-support-bundle: unreadable-file scan (running as root)"; fi
+  chmod 600 "$P3/b.txt"
+  P4=$C/p4; mkdir -p "$P4" "$P4.tar.gz"; echo 'clean' > "$P4/a.txt"
+  run "pbx-support-bundle: archive name that is a folder is refused (exit 2)" 2 "not a plain file" -- bash "$PB" --pack "$P4"
+  [[ -z $(ls -A "$P4.tar.gz") ]] && ok "pbx-support-bundle: nothing moved into that folder" || bad "pbx-support-bundle: nothing moved into that folder"
+  P5=$C/p5; mkdir -p "$P5" "$C/elsewhere"; echo 'clean' > "$P5/a.txt"; ln -s "$C/elsewhere" "$P5.tar.gz"
+  run "pbx-support-bundle: archive name that is a link is refused (exit 2)" 2 "not a plain file" -- bash "$PB" --pack "$P5"
+  P6=$C/p6; mkdir -p "$P6"; echo 'clean' > "$P6/a.txt"
+  run "pbx-support-bundle: --pack of a clean folder creates the archive (exit 0)" 0 "Archive: " -- bash "$PB" --pack "$P6"
+  [[ -f $P6.tar.gz && ! -L $P6.tar.gz && $(stat -c %a "$P6.tar.gz") == 600 ]] && ok "pbx-support-bundle: packed archive is a plain file, mode 600" || bad "pbx-support-bundle: packed archive is a plain file, mode 600"
   run "pbx-support-bundle: bad option is UNKNOWN" 3 "unknown option" -- bash "$PB" --nope
 else skp "pbx-support-bundle (script or perl missing)"; fi
 

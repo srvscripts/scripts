@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SIP TLS and WSS Certificate Check for Asterisk and FreePBX: Expiry, Hostname, Chain, Reload (v1.0.1) - from srvScripts.com
+# SIP TLS and WSS Certificate Check for Asterisk and FreePBX: Expiry, Hostname, Chain, Reload (v1.0.2) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/sip-tls-certificate-check/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -18,6 +18,10 @@
 # Nothing is changed: it reads config files and certificates and opens TLS connections. Private keys are only used
 # to compare public keys; nothing secret is printed.
 # Exit codes (Nagios style): 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN (bad option, openssl missing, nothing to check).
+# Version 1.0.2 (2026-10-17): second review: the private key is also compared when it sits in the same PEM file as
+#   the certificate (1.0.1 skipped that); an encrypted or missing key is reported; a server certificate that verifies
+#   is no longer taken as a working connection: an unfinished handshake (for example a server that requires a client
+#   certificate) is a WARNING, and the JSON has certificate_valid and handshake_complete.
 # Version 1.0.1 (2026-10-17): fixes from an independent review: a certificate that is not valid yet, an expired or
 #   not-yet-valid CA in the chain, a certificate not allowed for TLS servers, and a server that does not send its
 #   intermediate certificate are now reported (1.0.0 said OK); the served chain is always verified, with the transport's
@@ -121,7 +125,7 @@ check_days() { # label days
 
 for it in "${ITEMS[@]}"; do
   IFS='|' read -r label hp cert key ca name <<<"$it"
-  LINES+=("$label${hp:+ ($hp)}"); fdays=""; ffp=""; sdays=""; sfp=""; proto=""; selfsigned=0; vcode=""; vtext=""
+  hs=""; LINES+=("$label${hp:+ ($hp)}"); fdays=""; ffp=""; sdays=""; sfp=""; proto=""; selfsigned=0; vcode=""; vtext=""
   if [ -n "$cert" ]; then
     if [ ! -r "$cert" ] || ! openssl x509 -noout -in "$cert" 2>/dev/null; then say CRIT "certificate file $cert is missing or unreadable"
     else
@@ -146,17 +150,25 @@ for it in "${ITEMS[@]}"; do
           esac
         done <<<"${why:-0 0 unknown error}"
       fi
-      if [ -n "$key" ] && [ "$key" != "$cert" ]; then
+      if [ -n "$key" ]; then   # also when the key sits in the same PEM file as the certificate
+        kfile="private key $key"; [ "$key" = "$cert" ] && kfile="the private key in $key"
         if [ ! -r "$key" ]; then say WARN "private key $key is not readable by this user"
-        elif ! cmp -s <(openssl x509 -noout -pubkey -in "$cert" 2>/dev/null) <(openssl pkey -pubout -in "$key" 2>/dev/null); then
-          say CRIT "private key $key does not belong to the certificate: after the next reload TLS handshakes fail (Asterisk logs 'key values mismatch')"; fi
+        elif ! timeout 10 openssl pkey -pubout -in "$key" -passin pass: -out "$TMP/kpub.pem" </dev/null >/dev/null 2>&1; then
+          if grep -q 'ENCRYPTED' "$key" 2>/dev/null; then say WARN "$kfile is encrypted, so it could not be compared with the certificate"
+          elif [ "$key" = "$cert" ]; then say CRIT "no private key found in $key (certificate and key in one file): Asterisk cannot load it"
+          else say CRIT "$kfile could not be read as a private key"; fi
+        elif ! cmp -s <(openssl x509 -noout -pubkey -in "$cert" 2>/dev/null) "$TMP/kpub.pem"; then
+          say CRIT "$kfile does not belong to the certificate: after the next reload TLS handshakes fail (Asterisk logs 'key values mismatch')"
+        fi
       fi
     fi
   fi
   if [ -n "$hp" ]; then
     if [[ "$name" =~ ^[0-9.]+$|: ]]; then vopt=(-verify_ip "$name"); else vopt=(-servername "$name" -verify_hostname "$name"); fi
     cab=$(cabundle "$ca")
-    out=$(timeout "$TIMEOUT" openssl s_client -connect "$hp" "${vopt[@]}" ${cab:+-CAfile "$cab"} -showcerts </dev/null 2>&1); rc=$?
+    # keep the connection open for a second, so an alert the server sends after the handshake (TLS 1.3 client
+    # certificate check) is seen; with an immediately closed input openssl would exit 0 before it arrives
+    out=$(sleep 1 | timeout "$TIMEOUT" openssl s_client -connect "$hp" "${vopt[@]}" ${cab:+-CAfile "$cab"} -showcerts 2>&1); rc=$?
     awk '/-----BEGIN CERTIFICATE-----/{f=1} f{print} /-----END CERTIFICATE-----/{exit}' <<<"$out" > "$TMP/served.pem"
     if ! openssl x509 -noout -in "$TMP/served.pem" 2>/dev/null; then
       say CRIT "no TLS handshake on $hp: nothing listening, port blocked, or the server cannot load its certificate ($(grep -m1 -iE 'connect|errno|refused|timeout|alert' <<<"$out" | cut -c1-80 || echo "openssl exit $rc"))"
@@ -169,6 +181,14 @@ for it in "${ITEMS[@]}"; do
         else fix="Reload the HTTP server: asterisk -rx 'module reload http'"; fi
         say WARN "Asterisk serves a different certificate than $cert. Usually the file was renewed but not reloaded ($fix); a proxy in front, SNI or another configuration can also cause this."
       fi
+      # a valid certificate is not a working connection: the handshake must also have completed
+      hs=true; alert=$(grep -m1 -oiE 'alert [a-z][a-z ]*|alert number [0-9]+' <<<"$out")
+      if [ "$rc" -ne 0 ] || grep -qiE 'certificate required|alert number 116' <<<"$out"; then
+        hs=false
+        if grep -qiE 'certificate required|alert number 116|Acceptable client certificate CA names|Client Certificate Types' <<<"$out"; then
+          say WARN "$hp asks for a client certificate, so the TLS connection was not completed: only the server certificate was checked"
+        else say WARN "TLS handshake on $hp did not complete (${alert:-openssl exit $rc}): only the server certificate was checked"; fi
+      fi
       vr=$(grep -m1 -oE 'Verify return code: [0-9]+ \([^)]*\)' <<<"$out"); vcode=$(grep -oE '[0-9]+' <<<"$vr" | head -1); vtext=${vr#*(}; vtext=${vtext%)}
       [ -z "$cert" ] && { host_ok "$TMP/served.pem" "$name" || say WARN "served certificate does not match host name $name"; }
       # what a client sees: always judge the served chain, even when the leaf equals the file (the server may omit the intermediate)
@@ -179,13 +199,13 @@ for it in "${ITEMS[@]}"; do
         10) [ "${sdays:-1}" -lt 0 ] || say CRIT "served chain: a CA certificate has expired" ;;
         18|19) { [ "$ffp" = "$sfp" ] && [ "${selfsigned:-0}" = 1 ]; } || say WARN "served certificate is self-signed or its CA is not trusted: $vtext" ;;
         20|21) say WARN "served chain is incomplete or its CA is unknown ($vtext): the server probably does not send the intermediate certificate. Point the transport at the full chain file (certificate + intermediates), or add a private CA with --ca" ;;
-        x) say WARN "TLS handshake did not complete, so the served chain could not be verified (client certificate required, or the connection was closed)" ;;
+        x) [ "$hs" = false ] || say WARN "TLS handshake did not complete, so the served chain could not be verified (client certificate required, or the connection was closed)" ;;
         *) say WARN "served certificate fails verification: $vtext" ;;
       esac
       [[ "$proto" =~ ^TLSv1(\.[01])?$ ]] && say WARN "server negotiated $proto: TLS 1.0 and 1.1 are obsolete; set method=tlsv1_2 (or newer)"
     fi
   fi
-  JS+=("{\"item\":$(jstr "$label"),\"endpoint\":$(jstr "$hp"),\"file\":$(jstr "$cert"),\"name\":$(jstr "$name"),\"file_days_left\":${fdays:-null},\"served_days_left\":${sdays:-null},\"served_matches_file\":$( [ -n "$ffp" ] && [ -n "$sfp" ] && { [ "$ffp" = "$sfp" ] && echo true || echo false; } || echo null),\"tls\":$(jstr "$proto"),\"served_verify\":$(jstr "${vtext:-}")}")
+  JS+=("{\"item\":$(jstr "$label"),\"endpoint\":$(jstr "$hp"),\"file\":$(jstr "$cert"),\"name\":$(jstr "$name"),\"file_days_left\":${fdays:-null},\"served_days_left\":${sdays:-null},\"served_matches_file\":$( [ -n "$ffp" ] && [ -n "$sfp" ] && { [ "$ffp" = "$sfp" ] && echo true || echo false; } || echo null),\"tls\":$(jstr "$proto"),\"served_verify\":$(jstr "${vtext:-}"),\"certificate_valid\":$(case "${vcode:-}" in 0) echo true;; "") echo null;; *) echo false;; esac),\"handshake_complete\":${hs:-null}}")
 done
 
 LVL=(OK WARNING CRITICAL UNKNOWN); host=$(hostname -f 2>/dev/null || hostname)

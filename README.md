@@ -29,7 +29,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [Inode Usage Report: Top Directories by File Count per Account](https://srvscripts.com/scripts/inode-usage-report/) | [`inode-usage-report.sh`](inode-usage-report/inode-usage-report.sh) | 1.1.0 |
 | [MariaDB Slow Query Log Summary](https://srvscripts.com/scripts/mariadb-slow-query-summary/) | [`mariadb-slow-query-summary.sh`](mariadb-slow-query-summary/mariadb-slow-query-summary.sh) | 1.0.0 |
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
-| [PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords](https://srvscripts.com/scripts/pbx-support-bundle/) | [`pbx-support-bundle.sh`](pbx-support-bundle/pbx-support-bundle.sh) | 1.0.1 |
+| [PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords](https://srvscripts.com/scripts/pbx-support-bundle/) | [`pbx-support-bundle.sh`](pbx-support-bundle/pbx-support-bundle.sh) | 1.0.2 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |
 | [PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones](https://srvscripts.com/scripts/pjsip-health-check/) | [`pjsip-health-check.sh`](pjsip-health-check/pjsip-health-check.sh) | 1.0.1 |
 | [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](https://srvscripts.com/scripts/process-hog-report/) | [`process-hog-report.sh`](process-hog-report/process-hog-report.sh) | 1.0.0 |
@@ -37,7 +37,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.3.0 |
 | [Server Inventory Report](https://srvscripts.com/scripts/server-inventory-report/) | [`server-inventory-report.sh`](server-inventory-report/server-inventory-report.sh) | 1.0.1 |
 | [Server Security Audit Script](https://srvscripts.com/scripts/server-security-audit/) | [`server-security-audit.sh`](server-security-audit/server-security-audit.sh) | 2.3.0 |
-| [SIP TLS Certificate Check for Asterisk and FreePBX (TLS and WSS)](https://srvscripts.com/scripts/sip-tls-certificate-check/) | [`sip-tls-cert-check.sh`](sip-tls-certificate-check/sip-tls-cert-check.sh) | 1.0.1 |
+| [SIP TLS Certificate Check for Asterisk and FreePBX (TLS and WSS)](https://srvscripts.com/scripts/sip-tls-certificate-check/) | [`sip-tls-cert-check.sh`](sip-tls-certificate-check/sip-tls-cert-check.sh) | 1.0.2 |
 | [SIPp Call Load Test for Asterisk and FreePBX, Checked Against the CDR](https://srvscripts.com/scripts/sipp-call-load-test/) | [`sipp-call-load-test.sh`](sipp-call-load-test/sipp-call-load-test.sh) | 1.0.1 |
 | [SSL Expiry Check Script: Free Network Test for Web and Mail](https://srvscripts.com/scripts/ssl-expiry-check/) | [`ssl-expiry-check.sh`](ssl-expiry-check/ssl-expiry-check.sh) | 1.1.0 |
 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](https://srvscripts.com/scripts/voip-toll-fraud-watch/) | [`voip-toll-fraud-watch.sh`](voip-toll-fraud-watch/voip-toll-fraud-watch.sh) | 1.0.1 |

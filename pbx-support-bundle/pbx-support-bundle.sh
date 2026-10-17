@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# PBX Support Bundle for Asterisk and FreePBX: Redacted Diagnostics, Preview, No Upload (v1.0.1) - from srvScripts.com
+# PBX Support Bundle for Asterisk and FreePBX: Redacted Diagnostics, Preview, No Upload (v1.0.2) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/pbx-support-bundle/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
 # Collects what a VoIP consultant, your provider or a forum usually asks for (versions, PJSIP transports, endpoints,
 # registrations and contacts, selected config files, the last lines of the Asterisk log) into one archive, with
-# passwords, digest values, private keys, e-mail addresses, public IP addresses and phone numbers masked.
+# passwords, digest values, SRTP/ICE keys from SIP traces, private keys, e-mail addresses, public IP addresses and
+# phone numbers masked.
 # Only files on a fixed list are copied: never pjsip.auth.conf, manager.conf, voicemail.conf or the FreePBX database
 # config. Those are only read to check that none of their passwords ended up in the bundle (any match is masked).
 # Nothing is uploaded or sent anywhere. The result is a private folder (700) and archive (600) for you to review.
@@ -18,6 +19,12 @@
 # Exit codes: 0 archive created and the final scan found nothing, 1 the scan found something that may be sensitive
 # (no archive; fix the listed lines and run --pack), 2 nothing collected or the archive could not be written,
 # 3 bad option or missing tool.
+# Version 1.0.2 (2026-10-17): fixes from a second independent review: SDP keying material in SIP traces (SDES
+#   inline: keys incl. FEC keys, a=key-mgmt, k= lines, ICE passwords) is masked and checked by the final scan; this
+#   PBX's known passwords are masked before any pattern rule, and quoted FreePBX variable values are masked whole
+#   (1.0.1 masked only the first word of a password with a space); a scan that fails (unreadable file, report not
+#   writable) stops with exit 2 instead of counting as clean; the scan now covers every file, README.txt included;
+#   the archive name must not be an existing folder or link.
 # Version 1.0.1 (2026-10-17): fixes from an independent review: Digest values written with spaces around "=", other
 #   Authorization/Authentication-Info parameters and Bearer tokens are masked; known passwords with spaces are no
 #   longer cut short; scan.txt lists file, line and rule only (it printed the value in 1.0.0); no archive is created
@@ -64,32 +71,55 @@ while [ $# -gt 0 ]; do
 done
 command -v perl >/dev/null 2>&1 || die "perl is required (it is part of every Debian/RHEL base system)"
 command -v tar >/dev/null 2>&1 || die "tar is required"
-scan_bundle() { # dir -> writes dir/scan.txt, prints the number of hits
-  ( cd "$1" && find . -type f ! -name scan.txt ! -name README.txt -print0 ) | perl -0 -e '
-    my $dir = shift; my $n = 0; open my $o, ">", "$dir/scan.txt" or die "scan.txt: $!\n";
-    my @R = ( [ "assignment", qr/\b(?:password|secret|passwd|md5_cred|apikey|api_key|token|auth_?pass)\s*(?:=>|=|:)\s*(?!\*{4})["\x27]?[^\s*"\x27]/i ],
-              [ "freepbx-variable", qr/(?:PASS|SECRET|TOKEN)[A-Z_]*["\x27]?\s+to\s+["\x27](?!\*)/ ],
-              [ "private-key", qr/BEGIN [A-Z ]*PRIVATE KEY/ ],
-              [ "auth-header", qr/\b(?:Proxy-)?Authorization\s*:\s*(?:Basic|Bearer)\s+(?!\*{4})\S/i ],
-              [ "digest-value", qr/\b(?:response|nonce|cnonce|opaque|nextnonce|rspauth|auts)\s*=\s*"?(?!\*{4})[^\s",;*]/i ],
-              [ "long-token", qr{[A-Za-z0-9+/]{60,}={0,2}} ] );
-    local $/ = "\0";
-    while (my $f = <STDIN>) { chomp $f; $f =~ s{^\./}{}; open my $i, "<", "$dir/$f" or next; local $/ = "\n"; my $ln = 0;
-      while (my $l = <$i>) { $ln++; for my $r (@R) { if ($l =~ $r->[1]) { (my $safe = $f) =~ s/[^\w.\/-]/?/g; print $o "$safe:$ln: $r->[0]\n"; $n++; last } } } }
-    close $o; print $n;' "$1"
+scan_bundle() { # dir report-file -> writes the report (file:line:rule, never values), prints the number of hits;
+  # returns non-zero if any file cannot be read or the report cannot be written (a failed scan is never "clean")
+  ( cd "$1" && find . \( -type f -o -type l \) -print0 ) | perl -0 -e '
+    use strict; use warnings; my ($dir, $rep) = @ARGV; my $n = 0; open my $o, ">", $rep or die "scan report: $!\n";
+    my $K = qr/(?:password|secret|passwd|md5_cred|apikey|api_key|token|auth_?pass)/i;
+    sub masked { my $v = shift; return 1 if $v =~ /^(["\x27])\*{4,}\1/; return 1 if $v =~ /^\*{4,}(?:$|[\s,;&)}\]])/; 0 }
+    my @R = (
+      [ "assignment", sub { $_[0] =~ /\b$K\s*(?:=>|=|:)\s*([^\n]*)/ && length($1) && !masked($1) } ],
+      [ "freepbx-variable", sub { $_[0] =~ /(?:PASS|SECRET|TOKEN)[A-Z_]*["\x27]?\s+to\s+(["\x27][^\n]*)/ && !masked($1) } ],
+      [ "private-key", sub { $_[0] =~ /BEGIN [A-Z ]*PRIVATE KEY/ } ],
+      [ "auth-header", sub { $_[0] =~ /\b(?:Proxy-)?Authorization\s*:\s*(?:Basic|Bearer)\s+(?!\*{4})\S/i } ],
+      [ "digest-value", sub { $_[0] =~ /\b(?:response|nonce|cnonce|opaque|nextnonce|rspauth|auts)\s*=\s*"?(?!\*{4})[^\s",;*]/i } ],
+      [ "sdp-key", sub { $_[0] =~ /inline:(?!\*{4})[A-Za-z0-9+\/]{8,}|ice-pwd:(?!\*{4})\S{4,}|a=key-mgmt:\s*\S+\s+(?!\*{4})\S|(?:^|\s)k=(?:clear|base64|uri|prompt):(?!\*{4})\S/i } ],
+      [ "long-token", sub { $_[0] =~ m{[A-Za-z0-9+/]{60,}={0,2}} } ] );
+    my $err = 0; local $/ = "\0";
+    while (my $f = <STDIN>) { chomp $f; $f =~ s{^\./}{}; (my $safe = $f) =~ s/[^\w.\/-]/?/g;
+      if (-l "$dir/$f") { print $o "$safe:0: symbolic-link\n"; $n++; next }
+      my $i; unless (open $i, "<", "$dir/$f") { warn "cannot read $safe: $!\n"; $err++; next }
+      local $/ = "\n"; my $ln = 0;
+      while (my $l = <$i>) { $ln++; for my $r (@R) { if ($r->[1]->($l)) { print $o "$safe:$ln: $r->[0]\n"; $n++; last } } }
+      close $i or $err++; }
+    close $o or die "scan report: $!\n"; die "$err file(s) could not be scanned\n" if $err; print $n;' "$1" "$2"
+}
+scan_or_stop() { # dir -> sets HITS and leaves dir/scan.txt only when something was found; exits 2 if the scan fails
+  local dir=$1 rep rc
+  if [ -e "$dir/scan.txt" ] || [ -L "$dir/scan.txt" ]; then
+    if [ -f "$dir/scan.txt" ] && [ ! -L "$dir/scan.txt" ]; then rm -f "$dir/scan.txt"
+    else echo "ERROR: $dir/scan.txt is not a plain file (folder or link); remove it and try again. No archive was created." >&2; exit 2; fi
+  fi
+  rep=$(mktemp) || { echo "ERROR: cannot create a temporary scan report. No archive was created." >&2; exit 2; }
+  HITS=$(scan_bundle "$dir" "$rep"); rc=$?
+  if [ "$rc" -ne 0 ] || ! [[ "$HITS" =~ ^[0-9]+$ ]]; then rm -f "$rep"; echo "ERROR: the final scan failed (see above), so the bundle cannot be called clean. No archive was created." >&2; exit 2; fi
+  if [ "$HITS" -gt 0 ]; then cp "$rep" "$dir/scan.txt" && chmod 600 "$dir/scan.txt" || { rm -f "$rep"; echo "ERROR: cannot write $dir/scan.txt. No archive was created." >&2; exit 2; }; fi
+  rm -f "$rep"
 }
 pack_bundle() { # dir -> creates dir.tar.gz atomically, mode 600, verified; returns 0 or 2
   local dir=${1%/} base parent tmp; base=$(basename "$dir"); parent=$(dirname "$dir")
+  if [ -L "$dir.tar.gz" ] || { [ -e "$dir.tar.gz" ] && [ ! -f "$dir.tar.gz" ]; }; then
+    echo "ERROR: $dir.tar.gz already exists and is not a plain file (folder or link); move it away first. No archive was created." >&2; return 2; fi
   tmp=$(mktemp "$parent/.${base}.XXXXXX") || { echo "ERROR: cannot create a temporary archive in $parent" >&2; return 2; }
-  if tar -C "$parent" -czf "$tmp" "$base" && gzip -t "$tmp" && chmod 600 "$tmp" && [ -s "$tmp" ] && mv -f "$tmp" "$dir.tar.gz"; then return 0; fi
+  if tar -C "$parent" -czf "$tmp" "$base" && gzip -t "$tmp" && chmod 600 "$tmp" && [ -s "$tmp" ] && mv -fT "$tmp" "$dir.tar.gz" && [ -f "$dir.tar.gz" ] && [ ! -L "$dir.tar.gz" ]; then return 0; fi
   rm -f "$tmp"; echo "ERROR: the archive could not be created (disk full or not writable?); the reviewed folder $dir is kept" >&2; return 2
 }
 
 # ---- --pack: re-scan a bundle folder you edited and create the archive if nothing sensitive is left ----
 if [ -n "$PACK" ]; then
-  PACK=${PACK%/}; hits=$(scan_bundle "$PACK"); hits=${hits:-0}
-  if [ "$hits" -gt 0 ]; then echo "WARNING: $hits line(s) still look sensitive; see $PACK/scan.txt (file, line, rule; no values). No archive was created."; exit 1; fi
-  rm -f "$PACK/scan.txt"; pack_bundle "$PACK" || exit 2
+  PACK=${PACK%/}; scan_or_stop "$PACK"
+  if [ "$HITS" -gt 0 ]; then echo "WARNING: $HITS line(s) still look sensitive; see $PACK/scan.txt (file, line, rule; no values). No archive was created."; exit 1; fi
+  pack_bundle "$PACK" || exit 2
   echo "OK: nothing that looks like a password, key or token is left. Archive: $PACK.tar.gz (mode 600, $(du -h "$PACK.tar.gz" | cut -f1))"; exit 0
 fi
 
@@ -142,13 +172,20 @@ if [ "$LINES" -gt 0 ] && [ -r "$LOGDIR/full" ]; then tail -n "$LINES" "$LOGDIR/f
 [ -r /var/log/fail2ban.log ] && tail -n 300 /var/log/fail2ban.log > "$RAW/logs/fail2ban-tail.log"
 [ "$got" -gt 0 ] || { echo "ERROR: nothing could be collected (is this an Asterisk server? run as root)" >&2; exit 2; }
 
+# Real passwords of this PBX, read (never copied) from the files the bundle leaves out; masked before any other rule.
+perl -ne '
+  if (/^\s*(?:password|secret|md5_cred)\s*=>?\s*(.*?)\s*$/i) { my $v = $1; $v =~ s/(?<!\\);.*$//; $v =~ s/\;/;/g; $v =~ s/^\s+|\s+$//g; $v =~ s/^"(.*)"$/$1/; print "$v\n" if length $v; }
+  if (/\b(?:AMPDBPASS|AMPMGRPASS)["\x27]?\]?\s*=>?\s*["\x27]?([^"\x27;]+?)["\x27]?\s*;?\s*$/) { print "$1\n"; }
+' "$CONF/pjsip.auth.conf" "$CONF"/manager*.conf "$CONF/voicemail.conf" "$CONF/res_odbc.conf" /etc/freepbx.conf /etc/amportal.conf > "$RAW/known" 2>/dev/null
 # ---- redaction: one pass over every file, the same address always gets the same replacement ----
 DEST="$OUT/$name"; mkdir -m 700 "$DEST" || die "cannot create $DEST"; mkdir "$DEST/commands" "$DEST/config" "$DEST/logs"
-export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom
+KNOWN="$RAW/known"; export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom KNOWN
 ( cd "$RAW" && find . -type f -print0 ) | perl -0 -e '
   use strict; use warnings;
   my ($raw, $dest) = @ARGV; my (%map, %cnt); my ($n4, $n6) = (0, 0);
   my ($host, $dom) = ($ENV{host} // "", $ENV{dom} // "");
+  my $kre; if (open my $k, "<", $ENV{KNOWN}) { my %s; my @v = grep { length >= 4 && !/^\d{1,5}$/ && !$s{$_}++ } map { chomp; $_ } <$k>; close $k;
+    $kre = join "|", map { quotemeta } sort { length $b <=> length $a } @v if @v; }
   sub priv4 { my @o = split /\./, $_[0]; return 1 if $o[0]==10 || $o[0]==127 || ($o[0]==172 && $o[1]>=16 && $o[1]<=31) || ($o[0]==192 && $o[1]==168) || ($o[0]==100 && $o[1]>=64 && $o[1]<=127) || $o[0]==0 || $o[0]>=224 || ($o[0]==169 && $o[1]==254); 0 }
   sub doc4 { $_[0] =~ /^(192\.0\.2|198\.51\.100|203\.0\.113)\./ }
   sub ip4 { my $ip = shift; my @o = split /\./, $ip; return $ip if grep { $_ > 255 } @o; return $ip if $ENV{KEEP_IPS};
@@ -166,11 +203,19 @@ export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom
   local $/ = "\0";
   while (my $f = <STDIN>) { chomp $f; $f =~ s{^\./}{};
     open my $in, "<", "$raw/$f" or next; local $/; my $t = <$in>; close $in;
+    if (defined $kre) { $cnt{known} += ($t =~ s/$kre/********/g); }
     $cnt{key} += ($t =~ s/-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----/[private key removed]/gs);
     $cnt{secret} += ($t =~ s/^(\s*[;#]?\s*(?:password|secret|md5_cred|passwd|pass|apikey|api_key|token|auth_?pass|pin|community|key_?pass(?:word)?)\s*(?:=>|=|:)\s*)\S.*$/$1********/gmi);
     $cnt{secret} += ($t =~ s/\b(password|secret|passwd|token|apikey|api_key)(\s*[=:]\s*"?|":\s*")(?!\*{8})[^\s"&;,]+/$1$2********/gi);
     # FreePBX logs its manager and database credentials on every reload ("Setting global variable AMPDBPASS to ...")
-    $cnt{secret} += ($t =~ s/(\b[A-Za-z0-9_-]*(?:PASS|SECRET|TOKEN|APIKEY|API_KEY|PIN|CRED|DBUSER|MGRUSER)[A-Za-z0-9_-]*[\x27"]?\s*(?:to|=|=>)\s*[\x27"]?)(?!\*{8})[^\x27"\s)]+/$1********/gi);
+    my $VAR = qr/\b[A-Za-z0-9_-]*(?:PASS|SECRET|TOKEN|APIKEY|API_KEY|PIN|CRED|DBUSER|MGRUSER)[A-Za-z0-9_-]*[\x27"]?\s*(?:to|=|=>)\s*/i;
+    $cnt{secret} += ($t =~ s/($VAR)([\x27"])(?!\*{8}\2)[^\n]*?\2/$1$2********$2/g);
+    $cnt{secret} += ($t =~ s/($VAR)(?![\x27"*])[^\s)]+/$1********/g);
+    # SDP keying material in SIP traces: SDES keys (all of them, FEC keys too), MIKEY, k= lines, ICE passwords
+    $cnt{sdp} += ($t =~ s{(\binline:)(?!\*{8})[A-Za-z0-9+/]+=*}{$1********}gi);
+    $cnt{sdp} += ($t =~ s{(a=key-mgmt:\s*\S+\s+)(?!\*{8})\S+}{$1********}gi);
+    $cnt{sdp} += ($t =~ s{((?:^|\s)k=(?:clear|base64|uri|prompt):)(?!\*{8})\S+}{$1********}gim);
+    $cnt{sdp} += ($t =~ s{(\bice-pwd[:=]\s*"?)(?!\*{8})[^\s",;]+}{$1********}gi);
     # SIP / HTTP authentication headers: keep username, realm, uri, algorithm, qop, nc; mask everything else
     # (RFC 3261 allows spaces around "=" and folded continuation lines)
     $t =~ s{\b((?:Proxy-)?Authorization|(?:WWW|Proxy)-Authenticate|Authentication-Info)(\s*:)([^\n]*(?:\n[ \t]+[^\n]*)*)}{$1 . $2 . authval($1, $3)}gie;
@@ -183,26 +228,24 @@ export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom
     if ($ENV{MASK_NUM}) { $cnt{number} += ($t =~ s/(?<![\w.\/\-\$])(\+?)(\d{5,13})(\d{2})(?![\w.:])/$1 . ("*" x length $2) . $3/ge); }
     open my $out, ">", "$dest/$f" or die "cannot write $dest/$f: $!\n"; print $out $t; close $out;
   }
-  printf "masked: %d secret value(s), %d digest value(s), %d private key(s), %d e-mail(s), %d IP address occurrence(s) (%d distinct), %d phone number(s), %d host name(s)\n",
-    map({ $cnt{$_} // 0 } qw(secret digest key email ip)), scalar(keys %map), map({ $cnt{$_} // 0 } qw(number host));
+  printf "masked: %d secret value(s), %d digest value(s), %d SRTP/ICE key(s), %d private key(s), %d e-mail(s), %d IP address occurrence(s) (%d distinct), %d phone number(s), %d host name(s)\n",
+    map({ $cnt{$_} // 0 } qw(secret digest sdp key email ip)), scalar(keys %map), map({ $cnt{$_} // 0 } qw(number host));
+  printf "KNOWN1=%d\n", $cnt{known} // 0;
 ' "$RAW" "$DEST" > "$RAW/redaction.txt" 2>&1; prc=$?
 if [ "$prc" -ne 0 ]; then echo "ERROR: redaction failed, the bundle was removed: $(tail -1 "$RAW/redaction.txt")" >&2; rm -rf "$DEST"; exit 2; fi
+KNOWN1=$(sed -n 's/^KNOWN1=//p' "$RAW/redaction.txt"); sed -i '/^KNOWN1=/d' "$RAW/redaction.txt"
 # ---- safety net: the real secrets of this PBX must not appear anywhere in the bundle ----
-# Values are read (never copied) from the files the bundle leaves out, kept in the private temp folder, and every
-# literal occurrence in the bundle is masked. Short or purely numeric values under 6 digits are skipped.
-perl -ne '
-  if (/^\s*(?:password|secret|md5_cred)\s*=>?\s*(.*?)\s*$/i) { my $v = $1; $v =~ s/(?<!\\);.*$//; $v =~ s/\;/;/g; $v =~ s/^\s+|\s+$//g; $v =~ s/^"(.*)"$/$1/; print "$v\n" if length $v; }
-  if (/\b(?:AMPDBPASS|AMPMGRPASS)["\x27]?\]?\s*=>?\s*["\x27]?([^"\x27;]+?)["\x27]?\s*;?\s*$/) { print "$1\n"; }
-' "$CONF/pjsip.auth.conf" "$CONF"/manager*.conf "$CONF/voicemail.conf" "$CONF/res_odbc.conf" /etc/freepbx.conf /etc/amportal.conf > "$RAW/known" 2>/dev/null
+# The values were read (never copied) before redaction and masked first; this second pass catches any occurrence
+# the pattern rules may have changed around them. Short or purely numeric values under 6 digits are skipped.
 known=$(find "$DEST" -type f -print0 | perl -0 -e '
   open my $k, "<", shift or exit 0; my @v; { local $/ = "\n"; @v = grep { length >= 4 && !/^\d{1,5}$/ && !/^\*+$/ } map { chomp; $_ } <$k>; } my %s; @v = grep { !$s{$_}++ } @v;
   exit 0 unless @v; my $re = join "|", map { quotemeta } sort { length $b <=> length $a } @v; my $n = 0;
   local $/ = "\0"; while (my $f = <STDIN>) { chomp $f; local $/; open my $i, "<", $f or next; my $t = <$i>; close $i;
     my $c = ($t =~ s/$re/********/g); if ($c) { $n += $c; open my $o, ">", $f or die; print $o $t; close $o } }
   print $n;' "$RAW/known")
-echo "known secrets: ${known:-0} occurrence(s) of this PBX's real passwords found and masked" >> "$RAW/redaction.txt"
+echo "known secrets: ${KNOWN1:-0} occurrence(s) of this PBX's real passwords found and masked first, ${known:-0} more after the other rules" >> "$RAW/redaction.txt"
 {
-  echo "PBX support bundle created by https://srvscripts.com/scripts/pbx-support-bundle/ (v1.0.1) on $(date -u '+%F %T UTC')"
+  echo "PBX support bundle created by https://srvscripts.com/scripts/pbx-support-bundle/ (v1.0.2) on $(date -u '+%F %T UTC')"
   echo "Options: lines=$LINES keep_ips=$KEEP_IPS keep_private_ips=$KEEP_PRIV mask_host=$MASK_HOST mask_numbers=$MASK_NUM"
   cat "$RAW/redaction.txt"
   echo "Not collected on purpose: $NEVER, CDR and call recordings, the FreePBX database."
@@ -210,8 +253,7 @@ echo "known secrets: ${known:-0} occurrence(s) of this PBX's real passwords foun
 } > "$DEST/README.txt"
 
 # ---- final scan: anything that still looks secret? The list shows file, line number and rule, never the text ----
-hits=$(scan_bundle "$DEST"); hits=${hits:-0}
-[ "$hits" -gt 0 ] || rm -f "$DEST/scan.txt"
+scan_or_stop "$DEST"; hits=$HITS
 echo "Bundle folder: $DEST (mode 700)"
 sed -n 3,4p "$DEST/README.txt"
 echo "Files: $(find "$DEST" -type f | wc -l). Nothing was uploaded."
