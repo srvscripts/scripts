@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-16T23:58:45+00:00",
+    "generated": "2026-10-17T00:39:16+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -84,7 +84,7 @@
             "page": "https://srvscripts.com/scripts/asterisk-security-audit/",
             "language": "Bash",
             "version": "1.0.1",
-            "updated": "2026-10-16",
+            "updated": "2026-10-17",
             "summary": "A read-only Bash audit for Asterisk and FreePBX that finds the settings behind toll fraud and hijacked PBXs: unsupported versions, public AMI or IAX2, weak SIP passwords, anonymous SIP, trusted IPs in internal contexts, a blind fail2ban jail and unprotected international routes, each with a one-line fix."
         },
         {
@@ -132,7 +132,7 @@
             "page": "https://srvscripts.com/scripts/recording-retention-cleaner/",
             "language": "Bash",
             "version": "1.0.1",
-            "updated": "2026-10-16",
+            "updated": "2026-10-17",
             "summary": "A Bash script that enforces a retention period on Asterisk and FreePBX call recordings. It is a dry run by default, can archive old recordings into a verified tar.gz before deleting them, skips calls still being recorded, can stop the FreePBX call log linking to removed files, and can run only when the disk is filling up."
         },
         {
@@ -252,7 +252,7 @@
             "page": "https://srvscripts.com/scripts/freepbx-offsite-backup/",
             "language": "Bash",
             "version": "1.0.1",
-            "updated": "2026-10-16",
+            "updated": "2026-10-17",
             "summary": "A Bash script that backs up a FreePBX or Asterisk server without the FreePBX Backup module: both databases, the Asterisk internal database, configuration, voicemail, prompts and provisioning files, with checksums, a read-back check, an rsync/SSH copy to another server that is verified, and pruning of old sets."
         },
         {
@@ -396,7 +396,7 @@
             "page": "https://srvscripts.com/scripts/pjsip-health-check/",
             "language": "Bash",
             "version": "1.0.1",
-            "updated": "2026-10-16",
+            "updated": "2026-10-17",
             "summary": "A read-only Bash script that checks Asterisk and FreePBX PJSIP trunks, outbound registrations, contact round-trip times, phones and active calls, with Nagios-style exit codes, JSON output and mail or webhook alerts when something changes."
         },
         {
@@ -472,6 +472,18 @@
             "summary": "A read-only server security audit script for Linux: SSH, firewall, brute-force protection, updates, ports, sudo and filesystem checks as PASS/WARN lines. Checks it cannot run are SKIP, never PASS."
         },
         {
+            "slug": "sipp-call-load-test",
+            "title": "SIPp Call Load Test for Asterisk and FreePBX, Checked Against the CDR",
+            "file": "sipp-call-load-test.sh",
+            "url": "https://scr.srvscripts.com/sipp-call-load-test/sipp-call-load-test.sh",
+            "sha256": "090438dfa9dc56afd542028761d38540420f430b3ce2f821570c5979caacd4ee",
+            "page": "https://srvscripts.com/scripts/sipp-call-load-test/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-17",
+            "summary": "A Bash wrapper around SIPp that registers as one of your extensions, places a controlled burst of calls through Asterisk or FreePBX and then reads the call records, so calls the PBX answered itself are reported as false successes instead of delivered calls."
+        },
+        {
             "slug": "ssl-expiry-check",
             "title": "SSL Expiry Check Script: Free Network Test for Web and Mail",
             "file": "ssl-expiry-check.sh",
@@ -492,7 +504,7 @@
             "page": "https://srvscripts.com/scripts/voip-toll-fraud-watch/",
             "language": "Bash",
             "version": "1.0.1",
-            "updated": "2026-10-16",
+            "updated": "2026-10-17",
             "summary": "A Bash script that reads the Asterisk or FreePBX call records every few minutes and raises an alarm on the patterns of toll fraud: bursts of international or premium-rate calls, long international talk time, calls outside office hours, one extension making far more calls than usual, and transit calls that come in on a trunk and go straight back out."
         },
         {
