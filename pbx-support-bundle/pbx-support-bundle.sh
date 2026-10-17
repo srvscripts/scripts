@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PBX Support Bundle for Asterisk and FreePBX: Redacted Diagnostics, Preview, No Upload (v1.0.3) - from srvScripts.com
+# PBX Support Bundle for Asterisk and FreePBX: Redacted Diagnostics, Preview, No Upload (v1.0.4) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/pbx-support-bundle/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -19,8 +19,11 @@
 # Exit codes: 0 archive created and the final scan found nothing, 1 the scan found something that may be sensitive
 # (no archive; fix the listed lines and run --pack), 2 nothing collected or the archive could not be written,
 # 3 bad option or missing tool.
+# Version 1.0.4 (2026-10-18): comment correction only, no change in behaviour: the 1.0.3 note below now also names
+#   passwords shorter than 4 characters, which the 1.0.2 "known" file left readable as well.
 # Version 1.0.3 (2026-10-17): fixes from a third review: 1.0.2 copied its internal list of this PBX's passwords
-#   into the bundle as a file named "known" (masked, except passwords of up to 5 digits); the list now lives outside
+#   into the bundle as a file named "known" (masked, except passwords shorter than 4 characters, of any kind, and
+#   passwords of up to 5 digits); the list now lives outside
 #   the bundle, and folder and archive are checked against the fixed layout. With two or more known passwords the
 #   first masking pass read the list as one value, so a password with a space could keep its second word; fixed.
 #   Known passwords too short or too numeric to search for safely are counted in a warning.
@@ -261,7 +264,7 @@ known=$(find "$DEST" -type f -print0 | perl -0 -e '
   print $n;' "$WORK/known")
 echo "known secrets: ${KNOWN1:-0} occurrence(s) of this PBX's real passwords found and masked first, ${known:-0} more after the other rules" >> "$WORK/redaction.txt"
 {
-  echo "PBX support bundle created by https://srvscripts.com/scripts/pbx-support-bundle/ (v1.0.3) on $(date -u '+%F %T UTC')"
+  echo "PBX support bundle created by https://srvscripts.com/scripts/pbx-support-bundle/ (v1.0.4) on $(date -u '+%F %T UTC')"
   echo "Options: lines=$LINES keep_ips=$KEEP_IPS keep_private_ips=$KEEP_PRIV mask_host=$MASK_HOST mask_numbers=$MASK_NUM"
   cat "$WORK/redaction.txt"
   echo "Not collected on purpose: $NEVER, CDR and call recordings, the FreePBX database."

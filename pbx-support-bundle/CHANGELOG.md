@@ -4,7 +4,11 @@ File: `pbx-support-bundle.sh`. Page: <https://srvscripts.com/scripts/pbx-support
 
 Newest first. Each version is tagged `pbx-support-bundle/vX.Y.Z` in this repository.
 
-Tested on: 1.0.3, 1.0.2, 1.0.1 and 1.0.0 on Debian 12 with FreePBX 17.0.33 and Asterisk 22.11 (lab test, 16-17 Oct 2026): full run, dry run, independent leak check against the real passwords, a planted manager password, SDES key, ICE password, spaced Digest header and Bearer token; 40 automated checks
+Tested on: 1.0.4 (comment-only change of 1.0.3), 1.0.3, 1.0.2, 1.0.1 and 1.0.0 on Debian 12 with FreePBX 17.0.33 and Asterisk 22.11 (lab test, 16-17 Oct 2026): full run, dry run, independent leak check against the real passwords, a planted manager password, SDES key, ICE password, spaced Digest header and Bearer token; 40 automated checks
+
+## 1.0.4
+
+Comment correction only, no change in behaviour: the 1.0.3 note now also names passwords shorter than 4 characters, which the 1.0.2 "known" file left readable as well.
 
 ## 1.0.3
 
