@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SIP TLS and WSS Certificate Check for Asterisk and FreePBX: Expiry, Hostname, Chain, Reload (v1.0.0) - from srvScripts.com
+# SIP TLS and WSS Certificate Check for Asterisk and FreePBX: Expiry, Hostname, Chain, Reload (v1.0.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/sip-tls-certificate-check/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -18,6 +18,10 @@
 # Nothing is changed: it reads config files and certificates and opens TLS connections. Private keys are only used
 # to compare public keys; nothing secret is printed.
 # Exit codes (Nagios style): 0 OK, 1 WARNING, 2 CRITICAL, 3 UNKNOWN (bad option, openssl missing, nothing to check).
+# Version 1.0.1 (2026-10-17): fixes from an independent review: a certificate that is not valid yet, an expired or
+#   not-yet-valid CA in the chain, a certificate not allowed for TLS servers, and a server that does not send its
+#   intermediate certificate are now reported (1.0.0 said OK); the served chain is always verified, with the transport's
+#   ca_list_file and --ca; the "different certificate" message names other possible causes.
 # Version 1.0.0 (2026-10-17): first release. Tested on FreePBX 17.0.33 / Asterisk 22.11 (Debian 12, OpenSSL 3.0) with a
 #   PJSIP TLS transport and the FreePBX WSS server: private-CA, self-signed default, 9 days left, expired, mismatched
 #   key, renewed on disk but not reloaded. Wrong host name and "nothing listening" are tested against openssl s_server.
@@ -98,12 +102,16 @@ days_left() { local e; e=$(openssl x509 -enddate -noout -in "$1" 2>/dev/null | c
 cn_of() { openssl x509 -noout -subject -nameopt multiline -in "$1" 2>/dev/null | awk -F'= ' '/commonName/{print $2; exit}'; }
 fp_of() { openssl x509 -noout -fingerprint -sha256 -in "$1" 2>/dev/null | cut -d= -f2; }
 host_ok() { if [[ "$2" =~ ^[0-9.]+$|: ]]; then openssl x509 -noout -checkip "$2" -in "$1" 2>/dev/null | grep -q 'does match'; else openssl x509 -noout -checkhost "$2" -in "$1" 2>/dev/null | grep -q 'does match'; fi; }
-verify_chain() { # cert extra_ca -> prints openssl's error text, returns 0 if trusted
-  local ca=() out; [ -n "$2" ] && [ -r "$2" ] && ca=(-CAfile "$2")
-  [ -n "$CAFILE" ] && { cat "${2:-/dev/null}" "$CAFILE" > "$TMP/ca.pem" 2>/dev/null; ca=(-CAfile "$TMP/ca.pem"); }
-  out=$(openssl verify -no_check_time "${ca[@]}" -untrusted "$1" "$1" 2>&1) && return 0   # dates are checked separately
-  grep -m1 -oE 'error [0-9]+ at [0-9]+ depth lookup: .*' <<<"$out" | sed 's/^error [0-9]* at [0-9]* depth lookup: //'; return 1
+cabundle() { # transport ca_list_file + --ca -> path of a combined CA file, or nothing (system CAs only)
+  [ -z "$1" ] && [ -z "$CAFILE" ] && return 0
+  cat ${1:+"$1"} ${CAFILE:+"$CAFILE"} > "$TMP/ca.pem" 2>/dev/null; echo "$TMP/ca.pem"
 }
+verify_chain() { # cert cafile -> one "code depth message" line per problem; dates checked on every certificate in the chain
+  local ca=() out; [ -n "$2" ] && ca=(-CAfile "$2")
+  out=$(openssl verify "${ca[@]}" -purpose sslserver -untrusted "$1" "$1" 2>&1) && return 0
+  sed -nE 's/^error ([0-9]+) at ([0-9]+) depth lookup: (.*)$/\1 \2 \3/p' <<<"$out" | sort -u; return 1
+}
+not_before() { local b; b=$(openssl x509 -startdate -noout -in "$1" 2>/dev/null | cut -d= -f2); [ -n "$b" ] && [ "$(date -d "$b" +%s)" -gt "$NOW" ] && echo "$b"; }
 left() { if [ "$1" -lt 0 ]; then echo "expired $(( -$1 )) day(s) ago"; else echo "$1 day(s) left"; fi; }
 check_days() { # label days
   if [ "$2" -lt 0 ]; then say CRIT "$1 EXPIRED $(( -$2 )) day(s) ago"
@@ -113,18 +121,30 @@ check_days() { # label days
 
 for it in "${ITEMS[@]}"; do
   IFS='|' read -r label hp cert key ca name <<<"$it"
-  LINES+=("$label${hp:+ ($hp)}"); fdays=""; ffp=""; sdays=""; sfp=""; proto=""
+  LINES+=("$label${hp:+ ($hp)}"); fdays=""; ffp=""; sdays=""; sfp=""; proto=""; selfsigned=0; vcode=""; vtext=""
   if [ -n "$cert" ]; then
     if [ ! -r "$cert" ] || ! openssl x509 -noout -in "$cert" 2>/dev/null; then say CRIT "certificate file $cert is missing or unreadable"
     else
       fdays=$(days_left "$cert"); ffp=$(fp_of "$cert")
       LINES+=("    file $cert: CN=$(cn_of "$cert"), $(left "$fdays")")
       check_days "file $cert" "$fdays"
+      nb=$(not_before "$cert") && say CRIT "file certificate is not valid yet (valid from $nb): clients reject it until then"
       host_ok "$cert" "$name" || say WARN "file certificate does not match host name $name"
-      if ! why=$(verify_chain "$cert" "$ca"); then
-        if [ "$(openssl x509 -noout -subject -nameopt RFC2253 -in "$cert" | cut -d= -f2-)" = "$(openssl x509 -noout -issuer -nameopt RFC2253 -in "$cert" | cut -d= -f2-)" ]; then
-          say WARN "file certificate is self-signed: only clients told to trust this exact certificate accept it; browsers (WebRTC) and most SIP providers reject it"
-        else say WARN "file certificate chain is not trusted: ${why:-unknown error} (add the CA with --ca, or install the full chain)"; fi
+      selfsigned=0
+      [ "$(openssl x509 -noout -subject -nameopt RFC2253 -in "$cert" | cut -d= -f2-)" = "$(openssl x509 -noout -issuer -nameopt RFC2253 -in "$cert" | cut -d= -f2-)" ] && selfsigned=1
+      cab=$(cabundle "$ca")
+      if ! why=$(verify_chain "$cert" "$cab"); then
+        while read -r code depth msg; do
+          case "$code" in
+            10) [ "$depth" -gt 0 ] && say CRIT "a CA certificate in the file's chain (depth $depth) has expired" ;;   # the leaf itself is reported above
+            9) [ "$depth" -gt 0 ] && say CRIT "a CA certificate in the file's chain (depth $depth) is not valid yet" ;;
+            18|19) [ "$selfsigned" = 1 ] && say WARN "file certificate is self-signed: only clients told to trust this exact certificate accept it; browsers (WebRTC) and most SIP providers reject it" \
+                     || say WARN "file certificate chain ends in a CA that is not trusted here: $msg (add the CA with --ca)" ;;
+            26) say WARN "file certificate (depth $depth) is not allowed for TLS server use (extended key usage): $msg" ;;
+            "") ;;
+            *) say WARN "file certificate chain is not trusted: $msg (add the CA with --ca, or install the full chain)" ;;
+          esac
+        done <<<"${why:-0 0 unknown error}"
       fi
       if [ -n "$key" ] && [ "$key" != "$cert" ]; then
         if [ ! -r "$key" ]; then say WARN "private key $key is not readable by this user"
@@ -135,26 +155,37 @@ for it in "${ITEMS[@]}"; do
   fi
   if [ -n "$hp" ]; then
     if [[ "$name" =~ ^[0-9.]+$|: ]]; then vopt=(-verify_ip "$name"); else vopt=(-servername "$name" -verify_hostname "$name"); fi
-    out=$(timeout "$TIMEOUT" openssl s_client -connect "$hp" "${vopt[@]}" ${CAFILE:+-CAfile "$CAFILE"} -showcerts </dev/null 2>&1); rc=$?
+    cab=$(cabundle "$ca")
+    out=$(timeout "$TIMEOUT" openssl s_client -connect "$hp" "${vopt[@]}" ${cab:+-CAfile "$cab"} -showcerts </dev/null 2>&1); rc=$?
     awk '/-----BEGIN CERTIFICATE-----/{f=1} f{print} /-----END CERTIFICATE-----/{exit}' <<<"$out" > "$TMP/served.pem"
     if ! openssl x509 -noout -in "$TMP/served.pem" 2>/dev/null; then
       say CRIT "no TLS handshake on $hp: nothing listening, port blocked, or the server cannot load its certificate ($(grep -m1 -iE 'connect|errno|refused|timeout|alert' <<<"$out" | cut -c1-80 || echo "openssl exit $rc"))"
     else
       sdays=$(days_left "$TMP/served.pem"); sfp=$(fp_of "$TMP/served.pem"); proto=$(grep -m1 -oE 'TLSv1(\.[0-3])?' <<<"$out")
       LINES+=("    served on $hp: CN=$(cn_of "$TMP/served.pem"), $(left "$sdays"), ${proto:-TLS}")
-      [ "$ffp" = "$sfp" ] || check_days "served certificate" "$sdays"   # same certificate: already reported above
+      [ "$ffp" = "$sfp" ] || { check_days "served certificate" "$sdays"; nb=$(not_before "$TMP/served.pem") && say CRIT "served certificate is not valid yet (valid from $nb)"; }   # same certificate: already reported above
       if [ -n "$ffp" ] && [ "$ffp" != "$sfp" ]; then
         if [[ "$label" == PJSIP* ]]; then fix="Reload PJSIP: fwconsole reload, or asterisk -rx 'module reload res_pjsip.so' (older Asterisk versions may need allow_reload=yes on the transport or a restart)"
         else fix="Reload the HTTP server: asterisk -rx 'module reload http'"; fi
-        say WARN "Asterisk serves a different certificate than $cert (renewed on disk but not loaded). $fix"
+        say WARN "Asterisk serves a different certificate than $cert. Usually the file was renewed but not reloaded ($fix); a proxy in front, SNI or another configuration can also cause this."
       fi
-      vr=$(grep -m1 -oE 'Verify return code: [0-9]+ \([^)]*\)' <<<"$out")
+      vr=$(grep -m1 -oE 'Verify return code: [0-9]+ \([^)]*\)' <<<"$out"); vcode=$(grep -oE '[0-9]+' <<<"$vr" | head -1); vtext=${vr#*(}; vtext=${vtext%)}
       [ -z "$cert" ] && { host_ok "$TMP/served.pem" "$name" || say WARN "served certificate does not match host name $name"; }
-      if [ -z "$cert" ] && [[ ! "$vr" =~ code:\ 0\  ]]; then say WARN "served certificate not trusted: ${vr#Verify return code: }"; fi
+      # what a client sees: always judge the served chain, even when the leaf equals the file (the server may omit the intermediate)
+      case "${vcode:-x}" in
+        0) ;;
+        62) { [ -z "$cert" ] || [ "$ffp" = "$sfp" ]; } || say WARN "served certificate does not match host name $name" ;;   # otherwise reported above
+        9) not_before "$TMP/served.pem" >/dev/null || say CRIT "served chain: a CA certificate is not valid yet" ;;   # leaf: reported above
+        10) [ "${sdays:-1}" -lt 0 ] || say CRIT "served chain: a CA certificate has expired" ;;
+        18|19) { [ "$ffp" = "$sfp" ] && [ "${selfsigned:-0}" = 1 ]; } || say WARN "served certificate is self-signed or its CA is not trusted: $vtext" ;;
+        20|21) say WARN "served chain is incomplete or its CA is unknown ($vtext): the server probably does not send the intermediate certificate. Point the transport at the full chain file (certificate + intermediates), or add a private CA with --ca" ;;
+        x) say WARN "TLS handshake did not complete, so the served chain could not be verified (client certificate required, or the connection was closed)" ;;
+        *) say WARN "served certificate fails verification: $vtext" ;;
+      esac
       [[ "$proto" =~ ^TLSv1(\.[01])?$ ]] && say WARN "server negotiated $proto: TLS 1.0 and 1.1 are obsolete; set method=tlsv1_2 (or newer)"
     fi
   fi
-  JS+=("{\"item\":$(jstr "$label"),\"endpoint\":$(jstr "$hp"),\"file\":$(jstr "$cert"),\"name\":$(jstr "$name"),\"file_days_left\":${fdays:-null},\"served_days_left\":${sdays:-null},\"served_matches_file\":$( [ -n "$ffp" ] && [ -n "$sfp" ] && { [ "$ffp" = "$sfp" ] && echo true || echo false; } || echo null),\"tls\":$(jstr "$proto")}")
+  JS+=("{\"item\":$(jstr "$label"),\"endpoint\":$(jstr "$hp"),\"file\":$(jstr "$cert"),\"name\":$(jstr "$name"),\"file_days_left\":${fdays:-null},\"served_days_left\":${sdays:-null},\"served_matches_file\":$( [ -n "$ffp" ] && [ -n "$sfp" ] && { [ "$ffp" = "$sfp" ] && echo true || echo false; } || echo null),\"tls\":$(jstr "$proto"),\"served_verify\":$(jstr "${vtext:-}")}")
 done
 
 LVL=(OK WARNING CRITICAL UNKNOWN); host=$(hostname -f 2>/dev/null || hostname)

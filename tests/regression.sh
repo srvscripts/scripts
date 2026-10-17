@@ -279,6 +279,7 @@ mkold c.wav
 run "recording-retention-cleaner: dry run changes nothing" 0 "dry run" -- bash "$RC" --dir "$RD" --days 90
 [[ -f $RD/2026/01/01/c.wav ]] && ok "recording-retention-cleaner: dry run kept the file" || bad "recording-retention-cleaner: dry run kept the file"
 
+
 # ---- sip-tls-cert-check: local TLS servers stand in for Asterisk (no Asterisk needed; nothing is changed) ----
 TC="$ROOT/sip-tls-certificate-check/sip-tls-cert-check.sh"
 if command -v openssl >/dev/null && [[ -f $TC ]]; then
@@ -307,7 +308,37 @@ if command -v openssl >/dev/null && [[ -f $TC ]]; then
   tls good good good renewed
   run "sip-tls-cert-check: private key that does not match is critical" 2 "does not belong" -- "${TCR[@]}" --ca "$K/ca.pem"
   tls good good renewed renewed
-  run "sip-tls-cert-check: renewed on disk but not reloaded is detected" 1 "renewed on disk but not loaded" -- "${TCR[@]}" --ca "$K/ca.pem"
+  run "sip-tls-cert-check: renewed on disk but not reloaded is detected" 1 "renewed but not reloaded" -- "${TCR[@]}" --ca "$K/ca.pem"
+  # review 17 Oct 2026 (VOIP-03): not-yet-valid leaf, missing served intermediate, expired intermediate, wrong purpose
+  C2=$K/ca2; mkdir -p "$C2/new"; : > "$C2/index.txt"; echo 1000 > "$C2/serial"
+  printf '[ca]\ndefault_ca=d\n[d]\ndir=%s\ndatabase=$dir/index.txt\nserial=$dir/serial\nnew_certs_dir=$dir/new\ndefault_md=sha256\npolicy=p\nunique_subject=no\ncopy_extensions=copy\n[p]\ncommonName=supplied\n[leaf]\nbasicConstraints=CA:false\nsubjectAltName=DNS:pbx.test\nextendedKeyUsage=serverAuth\n[client]\nbasicConstraints=CA:false\nsubjectAltName=DNS:pbx.test\nextendedKeyUsage=clientAuth\n[inter]\nbasicConstraints=critical,CA:true\nkeyUsage=critical,keyCertSign,cRLSign\n' "$C2" > "$C2/ca.cnf"
+  sign(){ # name subject-cn signer-cert signer-key ext start end
+    openssl req -newkey rsa:2048 -nodes -keyout "$K/$1.key" -out "$K/$1.csr" -subj "/CN=$2" >/dev/null 2>&1
+    openssl ca -batch -config "$C2/ca.cnf" -cert "$3" -keyfile "$4" -extensions "$5" -startdate "$6" -enddate "$7" -in "$K/$1.csr" -out "$K/$1.crt" >/dev/null 2>&1
+    openssl x509 -in "$K/$1.crt" -out "$K/$1.pem" >/dev/null 2>&1; }
+  D(){ date -u -d "$1" +%Y%m%d%H%M%SZ; }
+  sign inter "srvScripts Test Intermediate" "$K/ca.pem" "$K/ca.key" inter "$(D '-1 day')" "$(D '+1000 days')"
+  sign oldint "srvScripts Expired Intermediate" "$K/ca.pem" "$K/ca.key" inter "$(D '-400 days')" "$(D '-2 days')"
+  sign ileaf pbx.test "$K/inter.pem" "$K/inter.key" leaf "$(D '-1 day')" "$(D '+300 days')"
+  sign oleaf pbx.test "$K/oldint.pem" "$K/oldint.key" leaf "$(D '-10 days')" "$(D '+300 days')"
+  sign future pbx.test "$K/ca.pem" "$K/ca.key" leaf "$(D '+2 days')" "$(D '+300 days')"
+  sign client pbx.test "$K/ca.pem" "$K/ca.key" client "$(D '-1 day')" "$(D '+300 days')"
+  cat "$K/ileaf.pem" "$K/inter.pem" > "$K/ifull.pem"; cp "$K/ileaf.key" "$K/ifull.key"
+  cat "$K/oleaf.pem" "$K/oldint.pem" > "$K/ofull.pem"; cp "$K/oleaf.key" "$K/ofull.key"
+  if [[ -s $K/ifull.pem && -s $K/future.pem && -s $K/client.pem && -s $K/ofull.pem ]]; then
+    tls future future future future
+    run "sip-tls-cert-check: certificate not valid yet is critical" 2 "not valid yet" -- "${TCR[@]}" --ca "$K/ca.pem"
+    tls ileaf ileaf ifull ifull
+    run "sip-tls-cert-check: server without its intermediate is a warning" 1 "served chain is incomplete" -- "${TCR[@]}" --ca "$K/ca.pem"
+    printf 'tlsenable=yes\ntlsbindaddr=127.0.0.1:18089\ntlscertfile=%s\ntlsprivatekey=%s\n' "$K/ifull.pem" "$K/ifull.key" > "$K/conf/http_custom.conf"
+    kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null
+    openssl s_server -quiet -accept 127.0.0.1:18089 -cert "$K/ileaf.pem" -key "$K/ileaf.key" -cert_chain "$K/inter.pem" -www >/dev/null 2>&1 & TLSPID=$!; sleep 1
+    run "sip-tls-cert-check: server with the full chain is OK" 0 "^OK: 1 TLS" -- "${TCR[@]}" --ca "$K/ca.pem"
+    tls oleaf oleaf ofull ofull
+    run "sip-tls-cert-check: expired intermediate is critical" 2 "CA certificate .*expired" -- "${TCR[@]}" --ca "$K/ca.pem"
+    tls client client client client
+    run "sip-tls-cert-check: certificate not allowed for TLS servers is a warning" 1 "not allowed for TLS server use" -- "${TCR[@]}" --ca "$K/ca.pem"
+  else bad "sip-tls-cert-check: could not build the chain fixtures (openssl ca)"; fi
   tls good good good good 18099
   run "sip-tls-cert-check: nothing listening is critical" 2 "no TLS handshake" -- "${TCR[@]}" --ca "$K/ca.pem"
   kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null
@@ -315,10 +346,11 @@ if command -v openssl >/dev/null && [[ -f $TC ]]; then
   run "sip-tls-cert-check: bad --check value is UNKNOWN" 3 "HOST:PORT" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T" --check 'a;b:1'
 else skp "sip-tls-cert-check (openssl or script missing)"; fi
 
+
 # ---- pbx-support-bundle: secrets, digest values, public IPs and numbers never reach the bundle (fake Asterisk) ----
 PB=$(S pbx-support-bundle)
 if [[ -f $PB ]] && command -v perl >/dev/null; then
-  B=$T/bundle; mkdir -p "$B/conf" "$B/log" "$B/bin" "$B/out" "$B/out2" "$B/out3"
+  B=$T/bundle; mkdir -p "$B/conf" "$B/log" "$B/bin" "$B/out" "$B/out2" "$B/out3" "$B/out4" "$B/out5"
   printf '#!/bin/bash\ncase "$2" in\n "core show version") echo "Asterisk 22.11.0";;\n "pjsip show contacts") echo " Contact: 1001/sip:1001@84.12.33.7:5062 Avail"; echo " Contact: 1004/sip:1004@[2a01:4f8:1:2::5]:5060 Avail";;\n *) echo "output of $2";;\nesac\n' > "$B/bin/asterisk"; chmod +x "$B/bin/asterisk"
   printf '[trunk-auth]\ntype=auth\nusername=trunkuser\npassword=SuperSecret123\n; secret = OldSecret99\n' > "$B/conf/pjsip_custom.conf"
   echo "secret=PjsipAuthSecret" > "$B/conf/pjsip.auth.conf"; printf '[admin]\nsecret = AmiSecret77\n' > "$B/conf/manager.conf"
@@ -349,10 +381,142 @@ LOG
   else bad "pbx-support-bundle: no bundle folder"; fi
   run "pbx-support-bundle: --keep-ips keeps public addresses" 0 "" -- "${PBR[@]}" --out "$B/out2" --keep-ips
   grep -rq '84\.12\.33\.7' "$B"/out2/pbx-support-*/ && ok "pbx-support-bundle: --keep-ips output has the address" || bad "pbx-support-bundle: --keep-ips output has the address"
-  echo 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N' >> "$B/log/full"
-  run "pbx-support-bundle: something the masks miss is reported (exit 1)" 1 "final scan found" -- "${PBR[@]}" --out "$B/out3"
+  printf '%s\n' "token-like blob: QWxhZGRpbjpvcGVuIHNlc2FtZVFXeGhaR1JwYmpwdmNHVnVJSE5sYzJGdFpRPT1RV3hoWkdScGJqcHZjR1Z1SUhObGMyRnRaUT09" >> "$B/log/full"
+  run "pbx-support-bundle: something the masks miss is reported (exit 1), no archive" 1 "No archive was created" -- "${PBR[@]}" --out "$B/out3"
+  BD3=$(ls -d "$B"/out3/pbx-support-*/ 2>/dev/null | head -1); BD3=${BD3%/}
+  if [[ -n $BD3 ]]; then
+    [[ ! -e $BD3.tar.gz ]] && ok "pbx-support-bundle: no archive while the scan finds something" || bad "pbx-support-bundle: no archive while the scan finds something"
+    grep -q 'long-token' "$BD3/scan.txt" && ! grep -q 'QWxhZGRpbjpvcGVu' "$BD3/scan.txt" && ok "pbx-support-bundle: scan.txt names the rule, never the value" || bad "pbx-support-bundle: scan.txt names the rule, never the value" "$BD3/scan.txt"
+    sed -i '/token-like blob/d' "$BD3/logs/asterisk-full-tail.log"
+    run "pbx-support-bundle: --pack after the fix creates the archive" 0 "Archive: " -- bash "$PB" --pack "$BD3"
+    [[ -s $BD3.tar.gz && $(stat -c %a "$BD3.tar.gz") == 600 ]] && ok "pbx-support-bundle: packed archive exists, mode 600" || bad "pbx-support-bundle: packed archive exists, mode 600"
+  else bad "pbx-support-bundle: no bundle folder for the scan test"; fi
+  sed -i '/token-like blob/d' "$B/log/full"
+  # review 17 Oct 2026 (VOIP-01, VOIP-06, VOIP-15): spaced Digest values, other auth headers, spaced known password, Bearer, failed archive
+  printf 'password=aa FixtureSpacedCredential ; old note\n' >> "$B/conf/pjsip.auth.conf"
+  cat >> "$B/log/full" <<'LOG'
+Authorization: Digest username="fixture", realm="asterisk", response = "abcdefabcdefabcdefabcdefabcdefab", nonce = "nonceFixtureAlpha", cnonce= cnonceFixtureBeta
+Proxy-Authorization: Digest username="fx2", response="fedcbafedcbafedcbafedcbafedcba99",
+	opaque="opaqueFixtureGamma"
+Authentication-Info: rspauth="rspauthFixtureDelta", nextnonce="nextnonceFixtureEps"
+Authorization: Bearer fixtureBearerCredentialABC
+NOTICE arbitrary debug text aa FixtureSpacedCredential end
+LOG
+  run "pbx-support-bundle: spaced Digest values, Bearer and spaced passwords are masked (exit 0)" 0 "Archive: " -- "${PBR[@]}" --out "$B/out4"
+  BD4=$(ls -d "$B"/out4/pbx-support-*/ 2>/dev/null | head -1)
+  if [[ -n $BD4 ]]; then
+    grep -rqE 'abcdefabcdef|nonceFixtureAlpha|cnonceFixtureBeta|fedcbafedcba|opaqueFixtureGamma|rspauthFixtureDelta|nextnonceFixtureEps|fixtureBearerCredentialABC|FixtureSpacedCredential' "$BD4" \
+      && bad "pbx-support-bundle: no auth value or spaced password survives" "$BD4/logs/asterisk-full-tail.log" || ok "pbx-support-bundle: no auth value or spaced password survives"
+    grep -q 'username="fixture"' "$BD4/logs/asterisk-full-tail.log" && ok "pbx-support-bundle: Digest username and realm are kept" || bad "pbx-support-bundle: Digest username and realm are kept" "$BD4/logs/asterisk-full-tail.log"
+  else bad "pbx-support-bundle: no bundle folder for the auth test"; fi
+  mkdir -p "$B/badtar"; printf '#!/bin/sh\necho "synthetic archive failure" >&2\nexit 2\n' > "$B/badtar/tar"; chmod +x "$B/badtar/tar"
+  run "pbx-support-bundle: a failed archive is an error (exit 2), not OK" 2 "archive could not be created" -- env PATH="$B/badtar:$PATH" ASTERISK_BIN="$B/bin/asterisk" bash "$PB" --conf "$B/conf" --logdir "$B/log" --out "$B/out5"
+  ls "$B"/out5/*.tar.gz >/dev/null 2>&1 && bad "pbx-support-bundle: no archive left after a failed tar" || ok "pbx-support-bundle: no archive left after a failed tar"
   run "pbx-support-bundle: bad option is UNKNOWN" 3 "unknown option" -- bash "$PB" --nope
 else skp "pbx-support-bundle (script or perl missing)"; fi
+
+# ---- sipp-call-load-test: success only when every count adds up (stub SIPp and CDR; no SIP traffic, no calls) ----
+SP=$(S sipp-call-load-test)
+if [[ -f $SP ]] && command -v python3 >/dev/null; then
+  L=$T/sipp; mkdir -p "$L/bin"
+  # screen file in the format SIPp 3.6.1 writes with -trace_screen (taken from a lab run, counters set per test)
+  mkscr(){ # created ok failed [cut]  -> $L/screen
+    python3 - "$@" > "$L/screen" <<'PY'
+import sys
+c,o,f=sys.argv[1:4]; cut=len(sys.argv)>4
+print("""------------------------------ Scenario Screen -------- [1-9]: Change Screen --
+  Call rate (length)   Port   Total-time  Total-calls  Remote-host
+  5.0(2000 ms)/1.000s   25070      4.15 s            %s  127.0.0.1:5060(UDP)
+
+                                 Messages  Retrans   Timeout   Unexpected-Msg
+    REGISTER ---------->         %s         0         0
+         401 <----------         %s         0         0         0
+    REGISTER ---------->         %s         0         0
+         200 <----------         %s         0         0         0
+      INVITE ---------->         %s         0         0
+         200 <----------  E-RTD1 %s         0         0         0
+         BYE ---------->         %s         0         0
+         200 <----------         %s         0         0         0""" % (c,c,c,c,c,c,o,o,o))
+if not cut:
+  print("""----------------------------- Statistics Screen ------- [1-9]: Change Screen --
+-------------------------+---------------------------+--------------------------
+  Counter Name           | Periodic value            | Cumulative value
+-------------------------+---------------------------+--------------------------
+  Incoming calls created |        0                  |        0
+  Outgoing calls created |        0                  |        %s
+  Total Calls created    |                           |        %s
+  Current Calls          |        0                  |
+-------------------------+---------------------------+--------------------------
+  Successful call        |        0                  |        %s
+  Failed call            |        0                  |        %s
+-------------------------+---------------------------+--------------------------""" % (c,c,o,f))
+PY
+  }
+  # SIPp stub: writes the prepared screen file where SIPp would, records its arguments, exits with $FX_RC
+  printf '#!/bin/sh\necho "$@" > "%s/sipp.args"\ncp "%s/screen" "./phone_$$_screen.log"\n: > err.log\nexit ${FX_RC:-0}\n' "$L" "$L" > "$L/bin/sipp"
+  # mysql stub: CDR rows from $L/cdr.tsv are queried with SQLite (same predicate text), or counts from $L/seq
+  cat > "$L/bin/mysql" <<'PY'
+#!/usr/bin/env python3
+import sys, os, re, sqlite3, datetime
+L=os.environ["FX_DIR"]; q=sys.argv[sys.argv.index("-e")+1]
+open(L+"/sql.log","a").write(q+"\n")
+if "SELECT 1 FROM cdr" in q: print(1); sys.exit(0)
+if "FROM trunks" in q:
+    if os.path.exists(L+"/trunks"): sys.stdout.write(open(L+"/trunks").read()); sys.exit(0)
+    sys.exit(1)
+if os.path.exists(L+"/seq") and "COUNT(DISTINCT uniqueid)" in q:
+    lines=open(L+"/seq").read().split("\n"); lines=[x for x in lines if x]; n=int(open(L+"/seqn").read()) if os.path.exists(L+"/seqn") else 0
+    print(lines[min(n,len(lines)-1)]); open(L+"/seqn","w").write(str(n+1)); sys.exit(0)
+db=sqlite3.connect(":memory:"); db.create_function("REGEXP",2,lambda p,v: 1 if v is not None and re.search(p,v) else 0)
+db.execute("CREATE TABLE cdr(calldate TEXT, src TEXT, dst TEXT, dstchannel TEXT, disposition TEXT, lastapp TEXT, uniqueid TEXT)")
+now=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+for i,l in enumerate(open(L+"/cdr.tsv").read().split("\n")):
+    if l: f=l.split("\t"); db.execute("INSERT INTO cdr VALUES(?,?,?,?,?,?,?)",(now,f[0],f[1],f[2],f[3],f[4],"u%d"%i))
+q=re.sub(r"(\w+) REGEXP '([^']*)'", r"REGEXP('\2',\1)", q).replace("\\_","_")
+for r in db.execute(q): print("\t".join(str(x) for x in r))
+PY
+  chmod +x "$L/bin/sipp" "$L/bin/mysql"
+  printf 'custom\tPJSIP/$OUTNUM$@labcarrier\npjsip\tother_trunk\n' > "$L/trunks"
+  cdr(){ : > "$L/cdr.tsv"; rm -f "$L/seq" "$L/seqn" "$L/sql.log"; local x; for x in "$@"; do printf '1002\t12125550123\t%s\tANSWERED\tDial\n' "$x" >> "$L/cdr.tsv"; done; }
+  spr(){ env PATH="$L/bin:$PATH" FX_DIR="$L" ASTERISK_BIN=/nonexistent CDR_WAIT="${CW:-0}" SIPP_SECRET=fixturepass bash "$SP" --ext 1002 --number 12125550123 --hold 1 --yes "$@"; }
+  T5=(PJSIP/labcarrier-00000001 PJSIP/labcarrier-00000002 PJSIP/labcarrier-00000003 PJSIP/labcarrier-00000004 PJSIP/labcarrier-00000005)
+  mkscr 5 5 0; cdr "${T5[@]}"
+  run "sipp-call-load-test: all calls answered on the trunk is OK" 0 "OK: all 5 call\(s\) were started, answered and answered on a listed trunk" -- spr --calls 5
+  grep -q "dstchannel LIKE 'PJSIP/labcarrier-%'" "$L/sql.log" && grep -q "PJSIP/other\\\\_trunk-%" "$L/sql.log" && ! grep -q "NOT LIKE 'Local" "$L/sql.log" && grep -q "calldate BETWEEN" "$L/sql.log" \
+    && ok "sipp-call-load-test: trunk list from FreePBX, start and end time in the CDR query" || bad "sipp-call-load-test: trunk list from FreePBX, start and end time in the CDR query" "$L/sql.log"
+  mkscr 1 1 0; cdr PJSIP/labcarrier-00000001
+  FX_RC=124 run "sipp-call-load-test: stopped by the time limit after one call is INCOMPLETE (exit 1)" 1 "INCOMPLETE: SIPp did not finish" -- spr --calls 30
+  FX_RC=124 run "sipp-call-load-test: one of 30 started never prints all OK" 1 "!OK: all" -- spr --calls 30
+  mkscr 0 0 0; cdr
+  FX_RC=99 run "sipp-call-load-test: no call started is an error (exit 2)" 2 "started no calls" -- spr --calls 30
+  mkscr 5 5 0 cut; cdr "${T5[@]}"
+  run "sipp-call-load-test: screen without the counters is INCOMPLETE" 1 "counters are missing" -- spr --calls 5
+  mkscr 5 3 2; cdr "${T5[@]:0:3}"
+  FX_RC=1 run "sipp-call-load-test: failed calls are reported (exit 1)" 1 "WARNING: 2 call\(s\) failed" -- spr --calls 5
+  mkscr 5 5 0; cdr "${T5[@]:0:3}" PJSIP/1003-00000006 PJSIP/1004-00000007
+  run "sipp-call-load-test: calls answered by an extension are not carrier delivery" 1 "answered on a listed trunk: 3 of 5" -- spr --calls 5
+  cdr "${T5[@]}" PJSIP/labcarrier-00000009
+  run "sipp-call-load-test: another call in the same window makes the result untrusted" 1 "more call records \(6\) than calls placed" -- spr --calls 5
+  cdr; printf '3\t3\n5\t5\n5\t5\n' > "$L/seq"
+  CW=6 run "sipp-call-load-test: late call records are waited for" 0 "answered on a listed trunk: 5 of 5" -- spr --calls 5
+  cdr; printf '3\t3\n' > "$L/seq"
+  CW=2 run "sipp-call-load-test: call records that never arrive are reported" 1 "only 3 call record" -- spr --calls 5
+  cdr "${T5[@]}"; mv "$L/trunks" "$L/trunks.off"; rm -f "$L/sipp.args"
+  run "sipp-call-load-test: no trunk list and no --carrier is refused before calling" 3 "trunk list" -- spr --calls 5
+  [[ ! -e $L/sipp.args ]] && ok "sipp-call-load-test: SIPp not started without a trunk list" || bad "sipp-call-load-test: SIPp not started without a trunk list"
+  run "sipp-call-load-test: --carrier regex counts the trunk" 0 "OK: all 5" -- spr --calls 5 --carrier '^PJSIP/labcarrier-'
+  mv "$L/trunks.off" "$L/trunks"
+  run "sipp-call-load-test: --no-cdr says delivery is not verified" 0 "delivery to the carrier was NOT verified" -- spr --calls 5 --no-cdr
+  for r in 0 0.0 abc -1; do rm -f "$L/sipp.args"
+    run "sipp-call-load-test: --rate $r is refused" 3 "rate" -- spr --calls 5 --rate "$r"
+    [[ ! -e $L/sipp.args ]] || bad "sipp-call-load-test: SIPp started with --rate $r"; done
+  run "sipp-call-load-test: --rate 100000 is refused" 3 "between 0.01 and 1000" -- spr --calls 5 --rate 100000
+  run "sipp-call-load-test: a plan longer than 24 hours is refused" 3 "more than 24 hours" -- spr --calls 5000 --rate 0.01
+  for r in 0.5 0.01 00.5 2 250; do
+    run "sipp-call-load-test: --rate $r runs" 0 "OK: all 5" -- spr --calls 5 --rate "$r"
+    grep -q -- "-r $r " "$L/sipp.args" || bad "sipp-call-load-test: SIPp got -r $r" "$L/sipp.args"; done
+  run "sipp-call-load-test: bad option is refused" 3 "unknown option" -- spr --nope
+else skp "sipp-call-load-test (script or python3 missing)"; fi
 
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))
