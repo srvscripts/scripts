@@ -281,6 +281,7 @@ run "recording-retention-cleaner: dry run changes nothing" 0 "dry run" -- bash "
 
 
 
+
 # ---- sip-tls-cert-check: local TLS servers stand in for Asterisk (no Asterisk needed; nothing is changed) ----
 TC="$ROOT/sip-tls-certificate-check/sip-tls-cert-check.sh"
 if command -v openssl >/dev/null && [[ -f $TC ]]; then
@@ -472,24 +473,43 @@ LOG
   P1=$C/p1; mkdir -p "$P1/logs" "$P1/scan.txt"; echo 'password=FixtureMustNotBePacked' > "$P1/logs/data.txt"
   run "pbx-support-bundle: --pack with scan.txt as a folder stops (exit 2), no archive" 2 "not a plain file" -- bash "$PB" --pack "$P1"
   [[ ! -e $P1.tar.gz ]] && ok "pbx-support-bundle: no archive after a failed scan" || bad "pbx-support-bundle: no archive after a failed scan"
-  P2=$C/p2; mkdir -p "$P2"; echo 'note'> "$P2/a.txt"; echo 'secret=FixtureMustNotBePacked' > "$P2/README.txt"
+  P2=$C/p2; mkdir -p "$P2/logs"; echo 'note'> "$P2/logs/a.txt"; echo 'secret=FixtureMustNotBePacked' > "$P2/README.txt"
   run "pbx-support-bundle: --pack scans README.txt too (exit 1)" 1 "still look sensitive" -- bash "$PB" --pack "$P2"
   [[ ! -e $P2.tar.gz ]] && grep -q 'README.txt:1: assignment' "$P2/scan.txt" && ! grep -q FixtureMustNotBePacked "$P2/scan.txt" \
     && ok "pbx-support-bundle: README.txt finding listed without its value, no archive" || bad "pbx-support-bundle: README.txt finding listed without its value, no archive" "$P2/scan.txt"
-  P3=$C/p3; mkdir -p "$P3"; echo 'clean' > "$P3/a.txt"; echo 'secret=FixtureMustNotBePacked' > "$P3/b.txt"; chmod 000 "$P3/b.txt"
+  P3=$C/p3; mkdir -p "$P3/logs"; echo 'clean' > "$P3/logs/a.txt"; echo 'secret=FixtureMustNotBePacked' > "$P3/logs/b.txt"; chmod 000 "$P3/logs/b.txt"
   if [[ $(id -u) != 0 ]]; then
     run "pbx-support-bundle: --pack with an unreadable file stops (exit 2)" 2 "scan failed" -- bash "$PB" --pack "$P3"
     [[ ! -e $P3.tar.gz ]] && ok "pbx-support-bundle: no archive when a file cannot be scanned" || bad "pbx-support-bundle: no archive when a file cannot be scanned"
   else skp "pbx-support-bundle: unreadable-file scan (running as root)"; fi
-  chmod 600 "$P3/b.txt"
-  P4=$C/p4; mkdir -p "$P4" "$P4.tar.gz"; echo 'clean' > "$P4/a.txt"
+  chmod 600 "$P3/logs/b.txt"
+  P4=$C/p4; mkdir -p "$P4/logs" "$P4.tar.gz"; echo 'clean' > "$P4/logs/a.txt"
   run "pbx-support-bundle: archive name that is a folder is refused (exit 2)" 2 "not a plain file" -- bash "$PB" --pack "$P4"
   [[ -z $(ls -A "$P4.tar.gz") ]] && ok "pbx-support-bundle: nothing moved into that folder" || bad "pbx-support-bundle: nothing moved into that folder"
-  P5=$C/p5; mkdir -p "$P5" "$C/elsewhere"; echo 'clean' > "$P5/a.txt"; ln -s "$C/elsewhere" "$P5.tar.gz"
+  P5=$C/p5; mkdir -p "$P5/logs" "$C/elsewhere"; echo 'clean' > "$P5/logs/a.txt"; ln -s "$C/elsewhere" "$P5.tar.gz"
   run "pbx-support-bundle: archive name that is a link is refused (exit 2)" 2 "not a plain file" -- bash "$PB" --pack "$P5"
-  P6=$C/p6; mkdir -p "$P6"; echo 'clean' > "$P6/a.txt"
+  P6=$C/p6; mkdir -p "$P6/logs"; echo 'clean' > "$P6/logs/a.txt"
   run "pbx-support-bundle: --pack of a clean folder creates the archive (exit 0)" 0 "Archive: " -- bash "$PB" --pack "$P6"
   [[ -f $P6.tar.gz && ! -L $P6.tar.gz && $(stat -c %a "$P6.tar.gz") == 600 ]] && ok "pbx-support-bundle: packed archive is a plain file, mode 600" || bad "pbx-support-bundle: packed archive is a plain file, mode 600"
+  # ---- 1.0.3: the password list never enters the bundle; several known passwords are masked whole ----
+  E=$T/bundle3; mkdir -p "$E/c1" "$E/c2" "$E/log" "$E/o1" "$E/o2"
+  echo 'NOTICE harmless line' > "$E/log/full"; printf '[auth]\npassword=1234\n' > "$E/c1/pjsip.auth.conf"; touch "$E/c1/pjsip.conf"
+  run "pbx-support-bundle: a short numeric known password gives a warning, not a file" 0 "too short or only digits" -- env ASTERISK_BIN="$B/bin/asterisk" bash "$PB" --conf "$E/c1" --logdir "$E/log" --out "$E/o1"
+  ED1=$(ls -d "$E"/o1/pbx-support-*/ 2>/dev/null | head -1); ED1=${ED1%/}
+  if [[ -n $ED1 && -f $ED1.tar.gz ]]; then
+    members=$(tar -tzf "$ED1.tar.gz"); X=$E/x1; mkdir -p "$X"; tar -xzf "$ED1.tar.gz" -C "$X"
+    { [[ -z $(find "$ED1" "$X" -name known) ]] && ! grep -qvE "^[^/]+/((README|scan)\.txt|(commands|config|logs)/([^/]+)?)?$" <<<"$members" && ! grep -rqw 1234 "$ED1" "$X"; } \
+      && ok "pbx-support-bundle: no password list and no other unexpected file in folder or archive" || bad "pbx-support-bundle: no password list and no other unexpected file in folder or archive"
+  else bad "pbx-support-bundle: no archive for the password-list test"; fi
+  printf '[auth]\npassword=aa FixtureSpacedCredential\n' > "$E/c2/pjsip.auth.conf"; printf '[ami]\nsecret=SecondFixtureCredential\n' > "$E/c2/manager_custom.conf"; touch "$E/c2/pjsip.conf"
+  printf 'NOTICE custom password=aa FixtureSpacedCredential\nNOTICE other SecondFixtureCredential end\n' > "$E/log/full"
+  run "pbx-support-bundle: two known passwords, one with a space, are masked whole (exit 0)" 0 "Archive: " -- env ASTERISK_BIN="$B/bin/asterisk" bash "$PB" --conf "$E/c2" --logdir "$E/log" --out "$E/o2"
+  ED2=$(ls -d "$E"/o2/pbx-support-*/ 2>/dev/null | head -1); ED2=${ED2%/}
+  if [[ -n $ED2 && -f $ED2.tar.gz ]]; then X=$E/x2; mkdir -p "$X"; tar -xzf "$ED2.tar.gz" -C "$X"
+    grep -rqE 'FixtureSpacedCredential|SecondFixtureCredential' "$ED2" "$X" && bad "pbx-support-bundle: no part of either known password survives" "$ED2/logs/asterisk-full-tail.log" || ok "pbx-support-bundle: no part of either known password survives"
+  else bad "pbx-support-bundle: no archive for the two-password test"; fi
+  P7=$C/p7; mkdir -p "$P7/logs"; echo 'clean' > "$P7/logs/a.txt"; echo 'clean' > "$P7/extra.txt"
+  run "pbx-support-bundle: --pack refuses files the bundle does not write (exit 2)" 2 "does not write" -- bash "$PB" --pack "$P7"
   run "pbx-support-bundle: bad option is UNKNOWN" 3 "unknown option" -- bash "$PB" --nope
 else skp "pbx-support-bundle (script or perl missing)"; fi
 

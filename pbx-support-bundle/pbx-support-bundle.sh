@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PBX Support Bundle for Asterisk and FreePBX: Redacted Diagnostics, Preview, No Upload (v1.0.2) - from srvScripts.com
+# PBX Support Bundle for Asterisk and FreePBX: Redacted Diagnostics, Preview, No Upload (v1.0.3) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/pbx-support-bundle/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 #
@@ -19,6 +19,11 @@
 # Exit codes: 0 archive created and the final scan found nothing, 1 the scan found something that may be sensitive
 # (no archive; fix the listed lines and run --pack), 2 nothing collected or the archive could not be written,
 # 3 bad option or missing tool.
+# Version 1.0.3 (2026-10-17): fixes from a third review: 1.0.2 copied its internal list of this PBX's passwords
+#   into the bundle as a file named "known" (masked, except passwords of up to 5 digits); the list now lives outside
+#   the bundle, and folder and archive are checked against the fixed layout. With two or more known passwords the
+#   first masking pass read the list as one value, so a password with a space could keep its second word; fixed.
+#   Known passwords too short or too numeric to search for safely are counted in a warning.
 # Version 1.0.2 (2026-10-17): fixes from a second independent review: SDP keying material in SIP traces (SDES
 #   inline: keys incl. FEC keys, a=key-mgmt, k= lines, ICE passwords) is masked and checked by the final scan; this
 #   PBX's known passwords are masked before any pattern rule, and quoted FreePBX variable values are masked whole
@@ -107,17 +112,26 @@ scan_or_stop() { # dir -> sets HITS and leaves dir/scan.txt only when something 
   rm -f "$rep"
 }
 pack_bundle() { # dir -> creates dir.tar.gz atomically, mode 600, verified; returns 0 or 2
-  local dir=${1%/} base parent tmp; base=$(basename "$dir"); parent=$(dirname "$dir")
+  local dir=${1%/} base parent tmp members; base=$(basename "$dir"); parent=$(dirname "$dir")
   if [ -L "$dir.tar.gz" ] || { [ -e "$dir.tar.gz" ] && [ ! -f "$dir.tar.gz" ]; }; then
     echo "ERROR: $dir.tar.gz already exists and is not a plain file (folder or link); move it away first. No archive was created." >&2; return 2; fi
   tmp=$(mktemp "$parent/.${base}.XXXXXX") || { echo "ERROR: cannot create a temporary archive in $parent" >&2; return 2; }
-  if tar -C "$parent" -czf "$tmp" "$base" && gzip -t "$tmp" && chmod 600 "$tmp" && [ -s "$tmp" ] && mv -fT "$tmp" "$dir.tar.gz" && [ -f "$dir.tar.gz" ] && [ ! -L "$dir.tar.gz" ]; then return 0; fi
-  rm -f "$tmp"; echo "ERROR: the archive could not be created (disk full or not writable?); the reviewed folder $dir is kept" >&2; return 2
+  if tar -C "$parent" -czf "$tmp" "$base" && gzip -t "$tmp" && chmod 600 "$tmp" && [ -s "$tmp" ] \
+     && members=$(tar -tzf "$tmp") && ! grep -qvE "^$(printf '%s' "$base" | sed 's/[.[\*^$]/\\&/g')/((README|scan)\.txt|(commands|config|logs)/([^/]+)?)?\$" <<<"$members" \
+     && mv -fT "$tmp" "$dir.tar.gz" && [ -f "$dir.tar.gz" ] && [ ! -L "$dir.tar.gz" ]; then return 0; fi
+  rm -f "$tmp"; echo "ERROR: the archive could not be created (disk full or not writable?) or did not hold exactly the bundle files; the reviewed folder $dir is kept" >&2; return 2
 }
 
+layout_ok() { # dir -> 0 if the folder holds only what the bundle writes: README.txt, scan.txt, commands/ config/ logs/ files
+  local dir=$1 bad
+  bad=$(cd "$dir" && find . -mindepth 1 ! -path ./README.txt ! -path ./scan.txt ! -path ./commands ! -path ./config ! -path ./logs \
+        ! -regex '\./\(commands\|config\|logs\)/[^/]*' -print | head -3)
+  [ -z "$bad" ] && return 0
+  echo "ERROR: $dir contains something the bundle does not write ($(echo $bad | tr '\n' ' ')); move it out and run --pack again. No archive was created." >&2; return 1
+}
 # ---- --pack: re-scan a bundle folder you edited and create the archive if nothing sensitive is left ----
 if [ -n "$PACK" ]; then
-  PACK=${PACK%/}; scan_or_stop "$PACK"
+  PACK=${PACK%/}; layout_ok "$PACK" || exit 2; scan_or_stop "$PACK"
   if [ "$HITS" -gt 0 ]; then echo "WARNING: $HITS line(s) still look sensitive; see $PACK/scan.txt (file, line, rule; no values). No archive was created."; exit 1; fi
   pack_bundle "$PACK" || exit 2
   echo "OK: nothing that looks like a password, key or token is left. Archive: $PACK.tar.gz (mode 600, $(du -h "$PACK.tar.gz" | cut -f1))"; exit 0
@@ -158,7 +172,9 @@ fi
 
 host=$(hostname -f 2>/dev/null || hostname); dom=$(hostname -d 2>/dev/null || true)
 stamp=$(date +%Y%m%d-%H%M%S); name="pbx-support-$( [ $MASK_HOST = 1 ] && echo pbx || echo "${host%%.*}")-$stamp"
-RAW=$(mktemp -d) || die "mktemp failed"; trap 'rm -rf "$RAW"' EXIT
+# RAW holds only the collected payload; WORK holds this script's own files (the password list, counters) and is
+# never read into the bundle
+RAW=$(mktemp -d) && WORK=$(mktemp -d) || die "mktemp failed"; trap 'rm -rf "$RAW" "$WORK"' EXIT
 mkdir -p "$RAW/commands" "$RAW/config" "$RAW/logs"
 n=0; got=0
 "$AST" -rx "core show version" >/dev/null 2>&1 || echo "WARNING: the Asterisk CLI did not answer (not running, or not root?): only system information and files are collected" >&2
@@ -176,15 +192,15 @@ if [ "$LINES" -gt 0 ] && [ -r "$LOGDIR/full" ]; then tail -n "$LINES" "$LOGDIR/f
 perl -ne '
   if (/^\s*(?:password|secret|md5_cred)\s*=>?\s*(.*?)\s*$/i) { my $v = $1; $v =~ s/(?<!\\);.*$//; $v =~ s/\;/;/g; $v =~ s/^\s+|\s+$//g; $v =~ s/^"(.*)"$/$1/; print "$v\n" if length $v; }
   if (/\b(?:AMPDBPASS|AMPMGRPASS)["\x27]?\]?\s*=>?\s*["\x27]?([^"\x27;]+?)["\x27]?\s*;?\s*$/) { print "$1\n"; }
-' "$CONF/pjsip.auth.conf" "$CONF"/manager*.conf "$CONF/voicemail.conf" "$CONF/res_odbc.conf" /etc/freepbx.conf /etc/amportal.conf > "$RAW/known" 2>/dev/null
+' "$CONF/pjsip.auth.conf" "$CONF"/manager*.conf "$CONF/voicemail.conf" "$CONF/res_odbc.conf" /etc/freepbx.conf /etc/amportal.conf > "$WORK/known" 2>/dev/null
 # ---- redaction: one pass over every file, the same address always gets the same replacement ----
 DEST="$OUT/$name"; mkdir -m 700 "$DEST" || die "cannot create $DEST"; mkdir "$DEST/commands" "$DEST/config" "$DEST/logs"
-KNOWN="$RAW/known"; export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom KNOWN
+KNOWN="$WORK/known"; export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom KNOWN
 ( cd "$RAW" && find . -type f -print0 ) | perl -0 -e '
   use strict; use warnings;
   my ($raw, $dest) = @ARGV; my (%map, %cnt); my ($n4, $n6) = (0, 0);
   my ($host, $dom) = ($ENV{host} // "", $ENV{dom} // "");
-  my $kre; if (open my $k, "<", $ENV{KNOWN}) { my %s; my @v = grep { length >= 4 && !/^\d{1,5}$/ && !$s{$_}++ } map { chomp; $_ } <$k>; close $k;
+  my $kre; if (open my $k, "<", $ENV{KNOWN}) { local $/ = "\n"; my %s; my @v = grep { length >= 4 && !/^\d{1,5}$/ && !$s{$_}++ } map { chomp; $_ } <$k>; close $k;
     $kre = join "|", map { quotemeta } sort { length $b <=> length $a } @v if @v; }
   sub priv4 { my @o = split /\./, $_[0]; return 1 if $o[0]==10 || $o[0]==127 || ($o[0]==172 && $o[1]>=16 && $o[1]<=31) || ($o[0]==192 && $o[1]==168) || ($o[0]==100 && $o[1]>=64 && $o[1]<=127) || $o[0]==0 || $o[0]>=224 || ($o[0]==169 && $o[1]==254); 0 }
   sub doc4 { $_[0] =~ /^(192\.0\.2|198\.51\.100|203\.0\.113)\./ }
@@ -231,9 +247,9 @@ KNOWN="$RAW/known"; export KEEP_IPS KEEP_PRIV MASK_HOST MASK_NUM host dom KNOWN
   printf "masked: %d secret value(s), %d digest value(s), %d SRTP/ICE key(s), %d private key(s), %d e-mail(s), %d IP address occurrence(s) (%d distinct), %d phone number(s), %d host name(s)\n",
     map({ $cnt{$_} // 0 } qw(secret digest sdp key email ip)), scalar(keys %map), map({ $cnt{$_} // 0 } qw(number host));
   printf "KNOWN1=%d\n", $cnt{known} // 0;
-' "$RAW" "$DEST" > "$RAW/redaction.txt" 2>&1; prc=$?
-if [ "$prc" -ne 0 ]; then echo "ERROR: redaction failed, the bundle was removed: $(tail -1 "$RAW/redaction.txt")" >&2; rm -rf "$DEST"; exit 2; fi
-KNOWN1=$(sed -n 's/^KNOWN1=//p' "$RAW/redaction.txt"); sed -i '/^KNOWN1=/d' "$RAW/redaction.txt"
+' "$RAW" "$DEST" > "$WORK/redaction.txt" 2>&1; prc=$?
+if [ "$prc" -ne 0 ]; then echo "ERROR: redaction failed, the bundle was removed: $(tail -1 "$WORK/redaction.txt")" >&2; rm -rf "$DEST"; exit 2; fi
+KNOWN1=$(sed -n 's/^KNOWN1=//p' "$WORK/redaction.txt"); sed -i '/^KNOWN1=/d' "$WORK/redaction.txt"
 # ---- safety net: the real secrets of this PBX must not appear anywhere in the bundle ----
 # The values were read (never copied) before redaction and masked first; this second pass catches any occurrence
 # the pattern rules may have changed around them. Short or purely numeric values under 6 digits are skipped.
@@ -242,17 +258,20 @@ known=$(find "$DEST" -type f -print0 | perl -0 -e '
   exit 0 unless @v; my $re = join "|", map { quotemeta } sort { length $b <=> length $a } @v; my $n = 0;
   local $/ = "\0"; while (my $f = <STDIN>) { chomp $f; local $/; open my $i, "<", $f or next; my $t = <$i>; close $i;
     my $c = ($t =~ s/$re/********/g); if ($c) { $n += $c; open my $o, ">", $f or die; print $o $t; close $o } }
-  print $n;' "$RAW/known")
-echo "known secrets: ${KNOWN1:-0} occurrence(s) of this PBX's real passwords found and masked first, ${known:-0} more after the other rules" >> "$RAW/redaction.txt"
+  print $n;' "$WORK/known")
+echo "known secrets: ${KNOWN1:-0} occurrence(s) of this PBX's real passwords found and masked first, ${known:-0} more after the other rules" >> "$WORK/redaction.txt"
 {
-  echo "PBX support bundle created by https://srvscripts.com/scripts/pbx-support-bundle/ (v1.0.2) on $(date -u '+%F %T UTC')"
+  echo "PBX support bundle created by https://srvscripts.com/scripts/pbx-support-bundle/ (v1.0.3) on $(date -u '+%F %T UTC')"
   echo "Options: lines=$LINES keep_ips=$KEEP_IPS keep_private_ips=$KEEP_PRIV mask_host=$MASK_HOST mask_numbers=$MASK_NUM"
-  cat "$RAW/redaction.txt"
+  cat "$WORK/redaction.txt"
   echo "Not collected on purpose: $NEVER, CDR and call recordings, the FreePBX database."
   echo "Masked IP addresses use documentation ranges (203.0.113.x, 198.51.100.x, 2001:db8::); the same address always gets the same replacement."
 } > "$DEST/README.txt"
 
 # ---- final scan: anything that still looks secret? The list shows file, line number and rule, never the text ----
+layout_ok "$DEST" || { rm -rf "$DEST"; exit 2; }
+weak=$(perl -ne 'chomp; $n++ if length($_) && (length($_) < 4 || /^\d{1,5}$/); END { print $n // 0 }' "$WORK/known")
+[ "${weak:-0}" -gt 0 ] && echo "WARNING: $weak of this PBX's passwords are too short or only digits (up to 5) to be searched for safely; they are masked only where they appear as password=... Change them: they are weak."
 scan_or_stop "$DEST"; hits=$HITS
 echo "Bundle folder: $DEST (mode 700)"
 sed -n 3,4p "$DEST/README.txt"

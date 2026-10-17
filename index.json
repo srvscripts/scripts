@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-17T16:17:57+00:00",
+    "generated": "2026-10-17T17:15:54+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -380,10 +380,10 @@
             "title": "PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords",
             "file": "pbx-support-bundle.sh",
             "url": "https://scr.srvscripts.com/pbx-support-bundle/pbx-support-bundle.sh",
-            "sha256": "6ac5403486670182d4d0276927678c6c1fb281d5d97ea67c37d7d795a33ae4c4",
+            "sha256": "7ff04fb32c298d770a0b53302e11080a446f82364b43affdc44eb16f5222c0dc",
             "page": "https://srvscripts.com/scripts/pbx-support-bundle/",
             "language": "Bash",
-            "version": "1.0.2",
+            "version": "1.0.3",
             "updated": "2026-10-17",
             "summary": "A Bash script that collects what a consultant or your SIP provider asks for (versions, PJSIP transports, endpoints, registrations, selected configs and recent logs) into a private archive, with passwords, digest values, keys, e-mail addresses, public IPs and phone numbers masked. Nothing is uploaded."
         },
