@@ -36,6 +36,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [Restic Backup Script for Offsite Backups](https://srvscripts.com/scripts/restic-offsite-backup/) | [`restic-offsite-backup.sh`](restic-offsite-backup/restic-offsite-backup.sh) | 1.3.0 |
 | [Server Inventory Report](https://srvscripts.com/scripts/server-inventory-report/) | [`server-inventory-report.sh`](server-inventory-report/server-inventory-report.sh) | 1.0.1 |
 | [Server Security Audit Script](https://srvscripts.com/scripts/server-security-audit/) | [`server-security-audit.sh`](server-security-audit/server-security-audit.sh) | 2.3.0 |
+| [SIP TLS Certificate Check for Asterisk and FreePBX (TLS and WSS)](https://srvscripts.com/scripts/sip-tls-certificate-check/) | [`sip-tls-cert-check.sh`](sip-tls-certificate-check/sip-tls-cert-check.sh) | 1.0.0 |
 | [SIPp Call Load Test for Asterisk and FreePBX, Checked Against the CDR](https://srvscripts.com/scripts/sipp-call-load-test/) | [`sipp-call-load-test.sh`](sipp-call-load-test/sipp-call-load-test.sh) | 1.0.0 |
 | [SSL Expiry Check Script: Free Network Test for Web and Mail](https://srvscripts.com/scripts/ssl-expiry-check/) | [`ssl-expiry-check.sh`](ssl-expiry-check/ssl-expiry-check.sh) | 1.1.0 |
 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](https://srvscripts.com/scripts/voip-toll-fraud-watch/) | [`voip-toll-fraud-watch.sh`](voip-toll-fraud-watch/voip-toll-fraud-watch.sh) | 1.0.1 |

@@ -279,5 +279,41 @@ mkold c.wav
 run "recording-retention-cleaner: dry run changes nothing" 0 "dry run" -- bash "$RC" --dir "$RD" --days 90
 [[ -f $RD/2026/01/01/c.wav ]] && ok "recording-retention-cleaner: dry run kept the file" || bad "recording-retention-cleaner: dry run kept the file"
 
+# ---- sip-tls-cert-check: local TLS servers stand in for Asterisk (no Asterisk needed; nothing is changed) ----
+TC="$ROOT/sip-tls-certificate-check/sip-tls-cert-check.sh"
+if command -v openssl >/dev/null && [[ -f $TC ]]; then
+  K=$T/tls; mkdir -p "$K/conf"
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$K/ca.key" -out "$K/ca.pem" -days 3650 -subj "/CN=srvScripts Test CA" >/dev/null 2>&1
+  leaf(){ # name days cn
+    openssl req -newkey rsa:2048 -nodes -keyout "$K/$1.key" -out "$K/$1.csr" -subj "/CN=$3" >/dev/null 2>&1
+    printf 'subjectAltName=DNS:%s\nextendedKeyUsage=serverAuth\n' "$3" > "$K/$1.ext"
+    openssl x509 -req -in "$K/$1.csr" -CA "$K/ca.pem" -CAkey "$K/ca.key" -CAcreateserial -days "$2" -extfile "$K/$1.ext" -out "$K/$1.pem" >/dev/null 2>&1; }
+  leaf good 400 pbx.test; leaf renewed 400 pbx.test; leaf soon 2 pbx.test
+  openssl req -x509 -newkey rsa:2048 -nodes -keyout "$K/self.key" -out "$K/self.pem" -days 400 -subj "/CN=pbx.test" -addext "subjectAltName=DNS:pbx.test" >/dev/null 2>&1
+  tls(){ # served-cert served-key file-cert file-key [port]
+    printf 'tlsenable=yes\ntlsbindaddr=127.0.0.1:%s\ntlscertfile=%s\ntlsprivatekey=%s\n' "${5:-18089}" "$K/$3.pem" "$K/$4.key" > "$K/conf/http_custom.conf"
+    [[ -n "${TLSPID:-}" ]] && { kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null; }
+    openssl s_server -quiet -accept 127.0.0.1:18089 -cert "$K/$1.pem" -key "$K/$2.key" -www >/dev/null 2>&1 & TLSPID=$!; sleep 1; }
+  TCR=(env ASTERISK_BIN=/bin/false bash "$TC" --conf "$K/conf" --name pbx.test)
+  tls good good good good
+  run "sip-tls-cert-check: trusted private-CA certificate is OK" 0 "^OK: 1 TLS" -- "${TCR[@]}" --ca "$K/ca.pem"
+  run "sip-tls-cert-check: unknown CA is a warning" 1 "chain is not trusted" -- "${TCR[@]}"
+  run "sip-tls-cert-check: wrong host name is a warning" 1 "does not match host name" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$K/conf" --name sip.other.test --ca "$K/ca.pem"
+  run "sip-tls-cert-check: JSON output" 0 '"status":"OK"' -- "${TCR[@]}" --ca "$K/ca.pem" --json
+  tls self self self self
+  run "sip-tls-cert-check: self-signed certificate is a warning" 1 "self-signed" -- "${TCR[@]}"
+  tls soon soon soon soon
+  run "sip-tls-cert-check: certificate expiring within --crit-days is critical" 2 "CRIT .*expires in [01] day" -- "${TCR[@]}" --ca "$K/ca.pem"
+  tls good good good renewed
+  run "sip-tls-cert-check: private key that does not match is critical" 2 "does not belong" -- "${TCR[@]}" --ca "$K/ca.pem"
+  tls good good renewed renewed
+  run "sip-tls-cert-check: renewed on disk but not reloaded is detected" 1 "renewed on disk but not loaded" -- "${TCR[@]}" --ca "$K/ca.pem"
+  tls good good good good 18099
+  run "sip-tls-cert-check: nothing listening is critical" 2 "no TLS handshake" -- "${TCR[@]}" --ca "$K/ca.pem"
+  kill "$TLSPID" 2>/dev/null; wait "$TLSPID" 2>/dev/null
+  run "sip-tls-cert-check: nothing to check is UNKNOWN" 3 "nothing to check" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T"
+  run "sip-tls-cert-check: bad --check value is UNKNOWN" 3 "HOST:PORT" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T" --check 'a;b:1'
+else skp "sip-tls-cert-check (openssl or script missing)"; fi
+
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))

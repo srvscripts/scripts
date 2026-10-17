@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-17T00:39:16+00:00",
+    "generated": "2026-10-17T01:08:41+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -470,6 +470,18 @@
             "version": "2.3.0",
             "updated": "2026-10-07",
             "summary": "A read-only server security audit script for Linux: SSH, firewall, brute-force protection, updates, ports, sudo and filesystem checks as PASS/WARN lines. Checks it cannot run are SKIP, never PASS."
+        },
+        {
+            "slug": "sip-tls-certificate-check",
+            "title": "SIP TLS Certificate Check for Asterisk and FreePBX (TLS and WSS)",
+            "file": "sip-tls-cert-check.sh",
+            "url": "https://scr.srvscripts.com/sip-tls-certificate-check/sip-tls-cert-check.sh",
+            "sha256": "60684147f560c17f08c0b6c5280187e6aeb395f65a28c666a9cff489190366ae",
+            "page": "https://srvscripts.com/scripts/sip-tls-certificate-check/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-17",
+            "summary": "A read-only Bash script that checks every SIP TLS certificate an Asterisk or FreePBX server uses (PJSIP TLS transports and the WSS server WebRTC phones connect to): days left, host name, chain, private key, and whether Asterisk still serves an old certificate after a renewal."
         },
         {
             "slug": "sipp-call-load-test",
