@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-17T01:08:41+00:00",
+    "generated": "2026-10-17T01:44:45+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -374,6 +374,18 @@
             "version": "1.0.0",
             "updated": "2026-10-09",
             "summary": "Free PowerShell script that exports NTFS folder permissions to CSV: identity, rights, allow/deny, inherited or explicit, scope, with errors logged."
+        },
+        {
+            "slug": "pbx-support-bundle",
+            "title": "PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords",
+            "file": "pbx-support-bundle.sh",
+            "url": "https://scr.srvscripts.com/pbx-support-bundle/pbx-support-bundle.sh",
+            "sha256": "1609825d7c60e283a3f7c085e23d89b4538f4958b23d48a3c6f72a03aabdd701",
+            "page": "https://srvscripts.com/scripts/pbx-support-bundle/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-17",
+            "summary": "A Bash script that collects what a consultant or your SIP provider asks for (versions, PJSIP transports, endpoints, registrations, selected configs and recent logs) into a private archive, with passwords, digest values, keys, e-mail addresses, public IPs and phone numbers masked. Nothing is uploaded."
         },
         {
             "slug": "php-fpm-slowlog-analyzer",

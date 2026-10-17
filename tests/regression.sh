@@ -315,5 +315,44 @@ if command -v openssl >/dev/null && [[ -f $TC ]]; then
   run "sip-tls-cert-check: bad --check value is UNKNOWN" 3 "HOST:PORT" -- env ASTERISK_BIN=/bin/false bash "$TC" --conf "$T" --check 'a;b:1'
 else skp "sip-tls-cert-check (openssl or script missing)"; fi
 
+# ---- pbx-support-bundle: secrets, digest values, public IPs and numbers never reach the bundle (fake Asterisk) ----
+PB=$(S pbx-support-bundle)
+if [[ -f $PB ]] && command -v perl >/dev/null; then
+  B=$T/bundle; mkdir -p "$B/conf" "$B/log" "$B/bin" "$B/out" "$B/out2" "$B/out3"
+  printf '#!/bin/bash\ncase "$2" in\n "core show version") echo "Asterisk 22.11.0";;\n "pjsip show contacts") echo " Contact: 1001/sip:1001@84.12.33.7:5062 Avail"; echo " Contact: 1004/sip:1004@[2a01:4f8:1:2::5]:5060 Avail";;\n *) echo "output of $2";;\nesac\n' > "$B/bin/asterisk"; chmod +x "$B/bin/asterisk"
+  printf '[trunk-auth]\ntype=auth\nusername=trunkuser\npassword=SuperSecret123\n; secret = OldSecret99\n' > "$B/conf/pjsip_custom.conf"
+  echo "secret=PjsipAuthSecret" > "$B/conf/pjsip.auth.conf"; printf '[admin]\nsecret = AmiSecret77\n' > "$B/conf/manager.conf"
+  cat > "$B/log/full" <<'LOG'
+[2026-10-16 20:19:45] VERBOSE[1] pbx.c: Executing [12125550123@from-internal:1] Dial("PJSIP/1002-00000007", "PJSIP/+442071838750@trunk") in new stack
+Authorization: Digest username="1002",realm="asterisk",nonce="1792199985/7fea92",response="8d5bc810081ae870537f3dec158ca74c",cnonce="327b23c6"
+From: "Alice" <sip:alice@company.co.uk>;tag=1
+Contact: <sip:1001@84.12.33.7:5062> lan 10.0.0.5 linkedid 1792200256.818317 time 20:19:45 v6 2001:4860:4860::8888
+[2026-10-16 20:02:14] VERBOSE[2] pbx_variables.c: Setting global variable 'AMPMGRPASS' to 'aB3dE5fG7hJ9'
+[2026-10-16 20:02:14] VERBOSE[2] pbx_variables.c: Setting global variable 'AMPDBPASS' to 'Zx9Qw8Lk'
+[2026-10-16 20:05:00] VERBOSE[1] app_custom.c: debug dump: login ok with AmiSecret77 for remote user
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAtest
+-----END RSA PRIVATE KEY-----
+LOG
+  PBR=(env ASTERISK_BIN="$B/bin/asterisk" bash "$PB" --conf "$B/conf" --logdir "$B/log")
+  run "pbx-support-bundle: dry run lists sources and collects nothing" 0 "Never copied" -- "${PBR[@]}" --dry-run --out "$B/out"
+  [[ -z $(ls -A "$B/out") ]] && ok "pbx-support-bundle: dry run wrote nothing" || bad "pbx-support-bundle: dry run wrote nothing"
+  run "pbx-support-bundle: bundle created, final scan clean" 0 "known secrets: 1 occurrence" -- "${PBR[@]}" --out "$B/out"
+  BD=$(ls -d "$B"/out/pbx-support-*/ 2>/dev/null | head -1)
+  if [[ -n $BD ]]; then
+    grep -rqE 'SuperSecret123|OldSecret99|PjsipAuthSecret|AmiSecret77|aB3dE5fG7hJ9|Zx9Qw8Lk|8d5bc810|7fea92|MIIEpAIBAAKCAQEAtest|alice@company|84\.12\.33\.7|2001:4860|12125550123|442071838750' "$BD" \
+      && bad "pbx-support-bundle: no secret, digest, key, e-mail, public IP or phone number in the bundle" || ok "pbx-support-bundle: no secret, digest, key, e-mail, public IP or phone number in the bundle"
+    [[ ! -e $BD/config/pjsip.auth.conf && ! -e $BD/config/manager.conf ]] && ok "pbx-support-bundle: password files are never copied" || bad "pbx-support-bundle: password files are never copied"
+    grep -q '10\.0\.0\.5' "$BD/logs/asterisk-full-tail.log" && grep -q '20:19:45' "$BD/logs/asterisk-full-tail.log" && grep -q 'PJSIP/1002-00000007' "$BD/logs/asterisk-full-tail.log" \
+      && ok "pbx-support-bundle: private IPs, times and channel names are kept" || bad "pbx-support-bundle: private IPs, times and channel names are kept" "$BD/logs/asterisk-full-tail.log"
+    [[ $(stat -c %a "$BD") == 700 && $(stat -c %a "${BD%/}.tar.gz") == 600 ]] && ok "pbx-support-bundle: folder 700, archive 600" || bad "pbx-support-bundle: folder 700, archive 600"
+  else bad "pbx-support-bundle: no bundle folder"; fi
+  run "pbx-support-bundle: --keep-ips keeps public addresses" 0 "" -- "${PBR[@]}" --out "$B/out2" --keep-ips
+  grep -rq '84\.12\.33\.7' "$B"/out2/pbx-support-*/ && ok "pbx-support-bundle: --keep-ips output has the address" || bad "pbx-support-bundle: --keep-ips output has the address"
+  echo 'Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N' >> "$B/log/full"
+  run "pbx-support-bundle: something the masks miss is reported (exit 1)" 1 "final scan found" -- "${PBR[@]}" --out "$B/out3"
+  run "pbx-support-bundle: bad option is UNKNOWN" 3 "unknown option" -- bash "$PB" --nope
+else skp "pbx-support-bundle (script or perl missing)"; fi
+
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))

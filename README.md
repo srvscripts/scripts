@@ -29,6 +29,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [Inode Usage Report: Top Directories by File Count per Account](https://srvscripts.com/scripts/inode-usage-report/) | [`inode-usage-report.sh`](inode-usage-report/inode-usage-report.sh) | 1.1.0 |
 | [MariaDB Slow Query Log Summary](https://srvscripts.com/scripts/mariadb-slow-query-summary/) | [`mariadb-slow-query-summary.sh`](mariadb-slow-query-summary/mariadb-slow-query-summary.sh) | 1.0.0 |
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
+| [PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords](https://srvscripts.com/scripts/pbx-support-bundle/) | [`pbx-support-bundle.sh`](pbx-support-bundle/pbx-support-bundle.sh) | 1.0.0 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |
 | [PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones](https://srvscripts.com/scripts/pjsip-health-check/) | [`pjsip-health-check.sh`](pjsip-health-check/pjsip-health-check.sh) | 1.0.1 |
 | [Process Hog Report: Which Account Is Using the CPU, RAM and Disk](https://srvscripts.com/scripts/process-hog-report/) | [`process-hog-report.sh`](process-hog-report/process-hog-report.sh) | 1.0.0 |
