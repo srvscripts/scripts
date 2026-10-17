@@ -8,7 +8,7 @@ Tested on: 1.0.3, 1.0.2, 1.0.1 and 1.0.0 on Debian 12 with FreePBX 17.0.33 and A
 
 ## 1.0.3
 
-The internal list of this PBX's passwords is kept outside the bundle (1.0.2 added it as a file named "known", masked except passwords of up to 5 digits); folder and archive are checked against the bundle's fixed layout; with two or more known passwords each one is masked whole (1.0.2 could leave the second word of a password with a space); passwords too short to search for are counted in a warning. Found in a third independent review.
+The internal list of this PBX's passwords is kept outside the bundle (1.0.2 added it as a file named "known", masked except passwords shorter than 4 characters or of up to 5 digits); folder and archive are checked against the bundle's fixed layout; with two or more known passwords each one is masked whole (1.0.2 could leave the second word of a password with a space); passwords too short to search for are counted in a warning. Found in a third independent review.
 
 ## 1.0.2
 
