@@ -2,7 +2,7 @@
 
 Free, read-only-by-default scripts for server admins from [srvScripts.com](https://srvscripts.com/scripts/): Bash, PowerShell and Python for cPanel, DirectAdmin, Linux, Active Directory, Microsoft 365 and VoIP servers.
 
-Each script has a page on srvScripts.com that explains what it does, its options, how to schedule it and how we tested it. Always read a script before you run it.
+Each script has a page on srvScripts.com that explains what it does, its options, how to schedule it and how we tested it, and each folder here has a README with the download, checksum and usage lines. Always read a script before you run it.
 
 Download a single file from [scr.srvscripts.com](https://scr.srvscripts.com/) and verify it with the `.sha256` file next to it.
 
