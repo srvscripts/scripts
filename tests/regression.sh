@@ -40,6 +40,14 @@ cp -r "$B" "$T/shrunk"; head -c 2000 /dev/urandom > "$T/small"; tar -czf "$T/shr
 run "backup-verify: a backup that shrank fails" 1 "FAIL" -- bash "$(S backup-verify)" "$T/shrunk" --expect "alice bob" --no-color
 cp -r "$B" "$T/broken"; head -c 150000 "$B/bob/backup-10.8.2026_bob.tar.gz" > "$T/broken/bob/backup-10.8.2026_bob.tar.gz"
 run "backup-verify: --deep catches a truncated archive" 1 "FAIL" -- bash "$(S backup-verify)" "$T/broken" --expect "alice bob" --deep --no-color
+# the damaged-backup example published on srvscripts.com/scripts/backup-verify/#damaged-example (tests/make-damaged-backups.sh)
+X=$T/bvdemo; bash "$ROOT/tests/make-damaged-backups.sh" "$X" >/dev/null 2>&1 || bad "backup-verify example: make-damaged-backups.sh failed"
+run "backup-verify example: quick test finds 5 problems" 1 "^5 problem" -- bash "$(S backup-verify)" "$X" --accounts-file "$X/accounts.txt" --no-color
+run "backup-verify example: quick test cannot see the cut-off tar stream" 1 "OK +@date/accounts/erin" -- bash "$(S backup-verify)" "$X" --accounts-file "$X/accounts.txt" --no-color
+run "backup-verify example: --deep finds 7 problems" 1 "^7 problem" -- bash "$(S backup-verify)" "$X" --accounts-file "$X/accounts.txt" --deep --no-color
+run "backup-verify example: --deep fails the cut-off tar stream" 1 "FAIL +@date/accounts/erin.tar.gz: archive listing FAILED" -- bash "$(S backup-verify)" "$X" --accounts-file "$X/accounts.txt" --deep --no-color
+run "backup-verify example: --deep fails the dump without trailer" 1 "FAIL +mysql/wpdb.sql.gz: dump has no" -- bash "$(S backup-verify)" "$X" --accounts-file "$X/accounts.txt" --deep --no-color
+run "backup-verify example: never-backed-up account fails coverage" 1 "FAIL +grace: no backup file" -- bash "$(S backup-verify)" "$X" --accounts-file "$X/accounts.txt" --no-color
 
 # ---- web-log-top-ips ----
 L=$T/access.log; now(){ date -u -d "-$1 minutes" '+%d/%b/%Y:%H:%M:%S +0000'; }
