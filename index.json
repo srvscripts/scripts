@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-18T07:30:19+00:00",
+    "generated": "2026-10-18T07:34:29+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -528,7 +528,7 @@
             "page": "https://srvscripts.com/scripts/ssl-expiry-check/",
             "language": "Bash",
             "version": "1.1.0",
-            "updated": "2026-10-05",
+            "updated": "2026-10-18",
             "summary": "Checks the live TLS certificate on any list of hosts \u2014 web, mail with STARTTLS, or every domain on a cPanel server \u2014 and warns before they expire. One line per host, cron-friendly exit codes."
         },
         {

@@ -5,6 +5,7 @@ The latest release of every script, most recently updated first. Each script fol
 | Updated | Script | Version | What changed |
 |---|---|---|---|
 | 2026-10-18 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](voip-toll-fraud-watch/CHANGELOG.md) | 1.0.1 | On FreePBX, or with --source db, an unreadable CDR database is UNKNOWN (exit 3) instead of a fallback to Master.csv. Skipped transit check shown. Alerts retried |
+| 2026-10-18 | [SSL Expiry Check Script: Free Network Test for Web and Mail](ssl-expiry-check/CHANGELOG.md) | 1.1.0 | Also verifies the certificate chain and host name: self-signed, untrusted, incomplete-chain and wrong-host certificates are now reported as BAD (previously only |
 | 2026-10-18 | [PJSIP Health Check: Monitor Asterisk Trunks, Registrations and Phones](pjsip-health-check/CHANGELOG.md) | 1.0.1 | A failed or malformed CLI query is UNKNOWN (exit 3); 1.0.0 could report OK with zero objects. Endpoints without a caller ID are counted. New --require-trunk. Al |
 | 2026-10-18 | [MariaDB Watchdog Script: Restart MariaDB or MySQL Only When It Is Really Hung](mariadb-watchdog/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-18 | [FreePBX Off-Site Backup Script: Databases, Config and Voicemail over rsync](freepbx-offsite-backup/CHANGELOG.md) | 1.0.1 | A failed verification run, an unreadable database server, a missing FreePBX database or a missing sqlite3 are failures; no local pruning after a failed copy. Fo |
@@ -46,7 +47,6 @@ The latest release of every script, most recently updated first. Each script fol
 | 2026-10-07 | [Server Security Audit Script](server-security-audit/CHANGELOG.md) | 2.3.0 | Firewall check is stricter: PASS only when the INPUT path ends in a catch-all DROP/REJECT (policy or final rule). A DROP that comes after a conditional ACCEPT i |
 | 2026-10-06 | [Server Inventory Report](server-inventory-report/CHANGELOG.md) | 1.0.1 | ImunifyAV is reported as ImunifyAV (malware scanner only) instead of Imunify360; process titles with spaces, such as cpsrvd (SSL), are shortened to the program  |
 | 2026-10-06 | [Redirect Chain Checker](redirect-tester/CHANGELOG.md) | 1.0.0 | Initial release |
-| 2026-10-05 | [SSL Expiry Check Script: Free Network Test for Web and Mail](ssl-expiry-check/CHANGELOG.md) | 1.1.0 | Also verifies the certificate chain and host name: self-signed, untrusted, incomplete-chain and wrong-host certificates are now reported as BAD (previously only |
 | 2026-10-05 | [MariaDB Slow Query Log Summary](mariadb-slow-query-summary/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-05 | [Disk and Inode Alert](disk-inode-alert/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-05 | [Access Log Top IPs and Bots Report](web-log-top-ips/CHANGELOG.md) | 1.0.0 | Initial release |
