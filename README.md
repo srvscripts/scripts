@@ -28,6 +28,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [FreePBX Off-Site Backup Script: Databases, Config and Voicemail over rsync](https://srvscripts.com/scripts/freepbx-offsite-backup/) | [`freepbx-offsite-backup.sh`](freepbx-offsite-backup/freepbx-offsite-backup.sh) | 1.0.1 |
 | [Inode Usage Report: Top Directories by File Count per Account](https://srvscripts.com/scripts/inode-usage-report/) | [`inode-usage-report.sh`](inode-usage-report/inode-usage-report.sh) | 1.1.0 |
 | [MariaDB Slow Query Log Summary](https://srvscripts.com/scripts/mariadb-slow-query-summary/) | [`mariadb-slow-query-summary.sh`](mariadb-slow-query-summary/mariadb-slow-query-summary.sh) | 1.0.0 |
+| [MariaDB Watchdog Script: Restart MariaDB or MySQL Only When It Is Really Hung](https://srvscripts.com/scripts/mariadb-watchdog/) | [`mariadb-watchdog.sh`](mariadb-watchdog/mariadb-watchdog.sh) | 1.0.0 |
 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](https://srvscripts.com/scripts/mysql-health-snapshot/) | [`mysql-health-snapshot.sh`](mysql-health-snapshot/mysql-health-snapshot.sh) | 1.0.0 |
 | [PBX Support Bundle for Asterisk and FreePBX: Share Diagnostics Without Passwords](https://srvscripts.com/scripts/pbx-support-bundle/) | [`pbx-support-bundle.sh`](pbx-support-bundle/pbx-support-bundle.sh) | 1.0.4 |
 | [PHP-FPM Slow Log Analyzer](https://srvscripts.com/scripts/php-fpm-slowlog-analyzer/) | [`php-fpm-slowlog-analyzer.sh`](php-fpm-slowlog-analyzer/php-fpm-slowlog-analyzer.sh) | 1.0.0 |

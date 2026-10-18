@@ -616,5 +616,59 @@ PY
   run "sipp-call-load-test: bad option is refused" 3 "unknown option" -- spr --nope
 else skp "sipp-call-load-test (script or python3 missing)"; fi
 
+# ---- mariadb-watchdog: hang detection and every safety guard (fake client, fake mariadbd process, stub systemctl) ----
+if [[ -f "$(S mariadb-watchdog)" ]]; then
+  WB=$T/wdbin; mkdir -p "$WB"; WS=$T/wdstate; WL=$T/wdlogs
+  cp "$(command -v sleep)" "$WB/mariadbd"                       # a process whose name is mariadbd
+  cat > "$WB/mariadb" <<'EOF'
+#!/bin/bash
+case "$(cat "$WD_MODE_FILE" 2>/dev/null)" in
+  hang) sleep 30 ;; denied) echo "ERROR 1045 (28000): Access denied for user 'x'@'localhost'" >&2; exit 1 ;;
+  busy) echo "ERROR 1040 (HY000): Too many connections" >&2; exit 1 ;; *) echo 1 ;;
+esac
+EOF
+  cat > "$WB/systemctl" <<'EOF'
+#!/bin/bash
+echo "$*" >> "$WD_SYSTEMCTL_LOG"
+case "$1" in
+  is-active) pgrep -x mariadbd >/dev/null && echo active || echo inactive ;;
+  stop) pkill -x mariadbd; sleep 1 ;;
+  kill) pkill -9 -x mariadbd ;;
+  start) (exec -a mariadbd "$WD_BIN/mariadbd" 600 & ) ; echo ok > "$WD_MODE_FILE" ;;
+esac
+exit 0
+EOF
+  chmod +x "$WB/mariadb" "$WB/systemctl"
+  export WD_MODE_FILE=$T/wdmode WD_SYSTEMCTL_LOG=$T/wdsysctl.log WD_BIN=$WB
+  ( exec -a mariadbd "$WB/mariadbd" 600 & ); sleep 1
+  WD(){ PATH="$WB:$PATH" bash "$(S mariadb-watchdog)" --state-dir "$WS" --log-dir "$WL" --service mariadb --grace 0 --timeout 2 "$@"; }
+  echo ok > "$WD_MODE_FILE"
+  run "mariadb-watchdog: healthy server" 0 "OK: answered SELECT 1" -- WD
+  echo denied > "$WD_MODE_FILE"
+  run "mariadb-watchdog: wrong login is a config error, never a restart" 3 "never a reason to restart" -- WD --restart
+  echo busy > "$WD_MODE_FILE"
+  run "mariadb-watchdog: too many connections is not a hang" 1 "BUSY" -- WD --restart --fails 1
+  echo hang > "$WD_MODE_FILE"; rm -rf "$WS"
+  run "mariadb-watchdog: hang 1 of 3 only counts" 1 "HUNG \(1/3\)" -- WD --restart
+  run "mariadb-watchdog: hang 2 of 3 only counts" 1 "HUNG \(2/3\)" -- WD --restart
+  run "mariadb-watchdog: grace period holds the restart" 1 "grace 3600s" -- WD --restart --grace 3600
+  ( exec -a mariadb-dump "$WB/mariadbd" 30 & ); sleep 1
+  run "mariadb-watchdog: a running backup holds the restart" 1 "a backup is running" -- WD --restart
+  pkill -f "^mariadb-dump" 2>/dev/null
+  run "mariadb-watchdog: report-only never restarts" 2 "would restart" -- WD
+  if grep -Eq "^(stop|start|kill)" "$WD_SYSTEMCTL_LOG" 2>/dev/null; then bad "mariadb-watchdog: systemctl stop/start called before --restart"; else ok "mariadb-watchdog: no stop/start before --restart"; fi
+  run "mariadb-watchdog: --restart restarts and waits for an answer" 2 "answers again" -- WD --restart --stop-timeout 10 --wait-up 30
+  run "mariadb-watchdog: healthy again, and the lock was not inherited" 0 "OK: answered" -- WD
+  echo hang > "$WD_MODE_FILE"
+  WD --restart --max-restarts 1 >/dev/null 2>&1; WD --restart --max-restarts 1 >/dev/null 2>&1
+  run "mariadb-watchdog: restart limit stops a restart loop" 2 "restart limit reached" -- WD --restart --max-restarts 1
+  pkill -x mariadbd 2>/dev/null; for _ in 1 2 3 4 5; do pgrep -x mariadbd >/dev/null || break; sleep 1; done; rm -f "$WS/failures"
+  run "mariadb-watchdog: a stopped server is not started without --start-if-down" 2 "was not started" -- WD --restart --fails 1
+  if pgrep -x mariadbd >/dev/null; then bad "mariadb-watchdog: down server was started"; else ok "mariadb-watchdog: down server left alone"; fi
+  pkill -x mariadbd 2>/dev/null
+else
+  skp "mariadb-watchdog not in this tree"
+fi
+
 echo; echo "$pass passed, $fail failed, $skip skipped"
 (( fail == 0 ))

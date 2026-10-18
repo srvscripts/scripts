@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-18T03:33:44+00:00",
+    "generated": "2026-10-18T05:30:36+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -326,6 +326,18 @@
             "version": "1.0.0",
             "updated": "2026-10-05",
             "summary": "Summarises the MariaDB slow query log without Percona tools: groups queries by fingerprint, ranks them by total time, count and rows examined, and prints the commands to turn logging on."
+        },
+        {
+            "slug": "mariadb-watchdog",
+            "title": "MariaDB Watchdog Script: Restart MariaDB or MySQL Only When It Is Really Hung",
+            "file": "mariadb-watchdog.sh",
+            "url": "https://scr.srvscripts.com/mariadb-watchdog/mariadb-watchdog.sh",
+            "sha256": "590c02287d8a02770bb0938b677341956c4b5dbc398d88f1689dc83a10c14d97",
+            "page": "https://srvscripts.com/scripts/mariadb-watchdog/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-18",
+            "summary": "A Bash watchdog for MariaDB and MySQL: checks that the server answers SELECT 1 within a time limit, saves diagnostics, and restarts only when you allow it and only when it is safe: not during startup or crash recovery, not during a backup, at most twice an hour. Report-only by default."
         },
         {
             "slug": "m365-mfa-status-report",
