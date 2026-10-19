@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-18T22:46:28+00:00",
+    "generated": "2026-10-19T01:44:29+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -108,7 +108,7 @@
             "page": "https://srvscripts.com/scripts/backup-verify/",
             "language": "Bash",
             "version": "2.1.2",
-            "updated": "2026-10-18",
+            "updated": "2026-10-19",
             "summary": "A backup verify script that checks every account and database series: fresh, not shrinking, opens cleanly, and present for every expected account. Anything it cannot test is a failure."
         },
         {
