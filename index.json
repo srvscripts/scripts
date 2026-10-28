@@ -559,13 +559,13 @@
             "file": "cpanel-php-stale-worker-check.sh",
             "language": "Bash",
             "page": "https://srvscripts.com/scripts/cpanel-php-stale-worker-check/",
-            "sha256": "244105e07be789a3f95a643d554b0186babdf68b01cf21ccd59679cc649ff6fd",
+            "sha256": "aae290b5e6cf1c2f8ffc7c4f300025f8b6b8a140367d341f78c02b3cf989874d",
             "slug": "cpanel-php-stale-worker-check",
             "summary": "Finds PHP (lsphp / php-fpm) workers still running a binary that a PHP update replaced on disk — the reason a cPanel site keeps reporting the old PHP version after an update. Read-only and audit-only: it reports confirmed-stale vs unverified mismatches and prints the exact recycle command, but does not terminate processes itself.",
             "title": "cPanel PHP Stale-Worker Check",
-            "updated": "2026-10-28",
+            "updated": "2026-10-29",
             "url": "https://scr.srvscripts.com/cpanel-php-stale-worker-check/cpanel-php-stale-worker-check.sh",
-            "version": "1.0.0"
+            "version": "1.0.1"
         }
     ]
 }

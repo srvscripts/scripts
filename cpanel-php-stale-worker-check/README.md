@@ -4,7 +4,7 @@ Finds PHP (lsphp / php-fpm) workers still running a binary that a PHP update rep
 
 **Full documentation, example output and troubleshooting:** <https://srvscripts.com/scripts/cpanel-php-stale-worker-check/>
 
-Version 1.0.0 · updated 2026-10-28 · Lab-tested (fixtures)
+Version 1.0.1 · updated 2026-10-29 · Fixtures + live cPanel audit (audit mode)
 
 ## Download, verify and run
 
@@ -49,7 +49,7 @@ Exit codes: 0 none, 1 unverified mismatch only, 2 confirmed stale worker(s),
 
 ## How we tested it
 
-Written for cPanel/WHM (EasyApache 4) on AlmaLinux 8/9 and CloudLinux 8/9. Logic verified against controlled process and /proc fixtures (ShellCheck clean, two review passes); not yet run against a production cPanel server.
+Written for cPanel/WHM (EasyApache 4) on AlmaLinux 8/9 and CloudLinux 8/9. Logic verified against controlled process and /proc fixtures (ShellCheck clean, two review passes); the audit path was then run on a live cPanel server (EA-PHP plus CloudLinux alt-php, many PHP-FPM masters) where its output matched the running processes. Repair is advisory only — it prints the exact recycle command and never terminates a process.
 
 ## Changes and licence
 

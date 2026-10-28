@@ -16,9 +16,10 @@
 #
 # This release is AUDIT-ONLY: it never terminates a process, restarts a service, or
 # changes anything. --repair does not kill anything either; given one confirmed-stale
-# PID it prints the exact recycle command for YOU to run and watch. Automated
-# termination is intentionally withheld until this tool has been validated on a
-# production cPanel/LiteSpeed server, not just the controlled fixtures used so far.
+# PID it prints the exact recycle command for YOU to run and watch. The audit path
+# has been validated on a live cPanel server (EA-PHP + CloudLinux alt-php, many
+# PHP-FPM masters); automated termination stays out of this release by design, so
+# recycling a worker is always a deliberate step you take and watch.
 #
 #   bash cpanel-php-stale-worker-check.sh                  # read-only audit
 #   bash cpanel-php-stale-worker-check.sh --csv stale.csv  # also write a CSV
@@ -38,7 +39,7 @@
 set -uo pipefail
 export LC_ALL=C
 
-VERSION=1.0.0
+VERSION=1.0.1
 R=${SRVS_ROOT:-}
 TESTMODE=0; [[ -n $R ]] && TESTMODE=1
 
@@ -179,9 +180,10 @@ while IFS= read -r b; do
   rp=${b#"$R"}
   v=$(php_ver_from_path "$rp")
   tag=$(sed -E 's#.*/opt/cpanel/(ea-php[0-9]+)/.*#\1#; t; s#.*/opt/alt/(php[0-9]+)/.*#alt-\1#; t; s#.*#?#' <<<"$rp")
-  installed+="$tag=${v:-?}"$'\n'
+  [[ -n $v && $tag != "?" ]] || continue   # skip non-versioned PHP paths (e.g. an alt php-fpm dir)
+  installed+="$tag=$v"$'\n'
 done < <(find "$R/opt/cpanel" "$R/opt/alt" -maxdepth 5 -type f \( -name lsphp -o -name php \) \
-            \( -path '*/ea-php*/*' -o -path '*/alt/php*/*' \) 2>/dev/null | sort -u)
+            \( -path '*/ea-php[0-9]*/*' -o -path '*/alt/php[0-9]*/*' \) 2>/dev/null | sort -u)
 installed=$(printf '%s' "$installed" | sort -u | grep -v '^$' | tr '\n' ' ')
 if [[ -n $installed ]]; then
   echo "On disk: $installed"
