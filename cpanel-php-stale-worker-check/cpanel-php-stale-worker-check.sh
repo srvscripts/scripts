@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# cPanel PHP Stale-Worker Check (v1.0.2) - from srvScripts.com
+# Source, docs and updates: https://srvscripts.com/scripts/cpanel-php-stale-worker-check/
+# Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # cpanel-php-stale-worker-check.sh — find PHP workers still running a replaced (stale) binary
 # https://srvscripts.com/scripts/cpanel-php-stale-worker-check/   License: MIT
 #
