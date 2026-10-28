@@ -4,7 +4,7 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
-| 2026-10-29 | [cPanel PHP Stale-Worker Check](cpanel-php-stale-worker-check/CHANGELOG.md) | 1.0.1 | Audit discovery ignores non-versioned PHP paths (e.g. an alt php-fpm dir), dropping a stray `?=?` in the installed list; audit path validated on a live cPanel server. |
+| 2026-10-29 | [cPanel PHP Stale-Worker Check](cpanel-php-stale-worker-check/CHANGELOG.md) | 1.0.2 | Worker identity hardened (matched by process name + executable, not command-line text — no false positives from monitors/editors); incomplete scans report INCOMPLETE and exit 3 instead of OK; --repair-plan surfaces stale masters + unreadable workers; --redact covers --repair. |
 | 2026-10-19 | [Backup Verify Script](backup-verify/CHANGELOG.md) | 2.1.2 | Header comment now shows the real version (it still said 2.1.0); no change to checks or output. |
 | 2026-10-18 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](voip-toll-fraud-watch/CHANGELOG.md) | 1.0.1 | On FreePBX, or with --source db, an unreadable CDR database is UNKNOWN (exit 3) instead of a fallback to Master.csv. Skipped transit check shown. Alerts retried |
 | 2026-10-18 | [SSL Expiry Check Script: Free Network Test for Web and Mail](ssl-expiry-check/CHANGELOG.md) | 1.1.0 | Also verifies the certificate chain and host name: self-signed, untrusted, incomplete-chain and wrong-host certificates are now reported as BAD (previously only |

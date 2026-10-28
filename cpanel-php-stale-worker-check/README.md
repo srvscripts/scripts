@@ -4,7 +4,7 @@ Finds PHP (lsphp / php-fpm) workers still running a binary that a PHP update rep
 
 **Full documentation, example output and troubleshooting:** <https://srvscripts.com/scripts/cpanel-php-stale-worker-check/>
 
-Version 1.0.1 · updated 2026-10-29 · Fixtures + live cPanel audit (audit mode)
+Version 1.0.2 · updated 2026-10-29 · Fixtures + live cPanel audit (audit mode)
 
 ## Download, verify and run
 
@@ -38,7 +38,8 @@ Options:
   --repair-plan     print recommended fixes for what was found, then exit (no change)
   --repair --pid N  print the exact recycle command for ONE confirmed-stale PID
                     (prints only; this release does not terminate anything)
-  --redact          show "uid:N" instead of account names (safe to paste in tickets)
+  --redact          show "uid:N" instead of account names in all output (executable
+                    paths are still shown — review output before sharing)
   --no-color        plain output even on a terminal
   -h, --help        this help
   -V, --version     print version
@@ -49,7 +50,7 @@ Exit codes: 0 none, 1 unverified mismatch only, 2 confirmed stale worker(s),
 
 ## How we tested it
 
-Written for cPanel/WHM (EasyApache 4) on AlmaLinux 8/9 and CloudLinux 8/9. Logic verified against controlled process and /proc fixtures (ShellCheck clean, two review passes); the audit path was then run on a live cPanel server (EA-PHP plus CloudLinux alt-php, many PHP-FPM masters) where its output matched the running processes. Repair is advisory only — it prints the exact recycle command and never terminates a process.
+Written for cPanel/WHM (EasyApache 4) on AlmaLinux 8/9 and CloudLinux 8/9. ShellCheck clean, with regression fixtures for stale / current / FPM-master / in-place-rebuild / unreadable / non-PHP / snapshot-failure cases. The normal-state audit was validated on a live cPanel server (EA-PHP plus CloudLinux alt-php, many PHP-FPM masters) where its output matched the running processes; stale-worker detection is validated through those controlled fixtures. Repair is advisory only — it prints the exact recycle command and never terminates a process.
 
 ## Changes and licence
 

@@ -16,10 +16,11 @@
 #
 # This release is AUDIT-ONLY: it never terminates a process, restarts a service, or
 # changes anything. --repair does not kill anything either; given one confirmed-stale
-# PID it prints the exact recycle command for YOU to run and watch. The audit path
-# has been validated on a live cPanel server (EA-PHP + CloudLinux alt-php, many
-# PHP-FPM masters); automated termination stays out of this release by design, so
-# recycling a worker is always a deliberate step you take and watch.
+# PID it prints the exact recycle command for YOU to run and watch. The normal-state
+# audit has been validated on a live cPanel server (EA-PHP + CloudLinux alt-php, many
+# PHP-FPM masters); stale-worker DETECTION is validated through controlled fixtures.
+# Automated termination stays out of this release by design, so recycling a worker is
+# always a deliberate step you take and watch.
 #
 #   bash cpanel-php-stale-worker-check.sh                  # read-only audit
 #   bash cpanel-php-stale-worker-check.sh --csv stale.csv  # also write a CSV
@@ -39,7 +40,7 @@
 set -uo pipefail
 export LC_ALL=C
 
-VERSION=1.0.1
+VERSION=1.0.2
 R=${SRVS_ROOT:-}
 TESTMODE=0; [[ -n $R ]] && TESTMODE=1
 
@@ -61,7 +62,8 @@ Options:
   --repair-plan     print recommended fixes for what was found, then exit (no change)
   --repair --pid N  print the exact recycle command for ONE confirmed-stale PID
                     (prints only; this release does not terminate anything)
-  --redact          show "uid:N" instead of account names (safe to paste in tickets)
+  --redact          show "uid:N" instead of account names in all output (executable
+                    paths are still shown — review output before sharing)
   --no-color        plain output even on a terminal
   -h, --help        this help
   -V, --version     print version
@@ -111,11 +113,14 @@ fi
 # A process snapshot: pid<TAB>ppid<TAB>uid<TAB>etimes<TAB>comm<TAB>args
 ps_snapshot() {
   if (( TESTMODE )); then
-    cat "$R/ps.txt" 2>/dev/null
+    [[ -f $R/ps.txt ]] || return 3        # a missing fixture is a failed snapshot, not "no workers"
+    cat "$R/ps.txt"
   else
+    command -v ps >/dev/null 2>&1 || return 3
     # etimes = seconds since the process started; comm = short name; args = full cmdline
     ps -eo pid=,ppid=,uid=,etimes=,comm=,args= 2>/dev/null \
       | awk '{ pid=$1; ppid=$2; uid=$3; et=$4; comm=$5; $1=$2=$3=$4=$5=""; sub(/^ +/,""); printf "%s\t%s\t%s\t%s\t%s\t%s\n", pid, ppid, uid, et, comm, $0 }'
+    return "${PIPESTATUS[0]}"             # propagate a ps failure (do not let it look like an empty list)
   fi
 }
 
@@ -193,20 +198,45 @@ fi
 
 # ---- 2. running workers + /proc inspection ---------------------------------
 hr "PHP workers"
-# Collect worker rows: pid ppid uid etimes comm exe deleted(0/1) state
+# Collect the process snapshot ONCE and tell a real collection failure (ps
+# missing, or an unreadable fixture) apart from a genuinely empty worker list —
+# a failed snapshot must never be reported as "no stale workers".
+snap=$(ps_snapshot); snap_rc=$?
+if (( snap_rc != 0 )); then
+  st INFO "could not read the process list (ps unavailable or the snapshot failed) — cannot determine worker state; re-run as root on a cPanel server"
+  exit 3
+fi
+
+# Collect worker rows: pid ppid uid etimes kind exepath deleted(0/1)
 workers=""
 while IFS=$'\t' read -r pid ppid uid et comm args; do
-  [[ $comm == lsphp || $comm == php-fpm* || $args == *"/lsphp"* || $args == *"php-fpm"* ]] || continue
-  # the FPM master (ppid 1, "master process" in args) is managed, not a stale leaf
-  if   [[ $args == *"master process"* ]]; then kind="php-fpm(master)"
-  elif [[ $comm == php-fpm* ]];           then kind="php-fpm"
-  else                                         kind="lsphp"; fi
+  [[ -n $pid ]] || continue
+  # Identify a real PHP worker by its process NAME (comm = the executable's own
+  # basename, as the kernel reports it) — never by loose command-line text. A
+  # monitor, shell or editor whose arguments merely mention "php-fpm" or "lsphp"
+  # must not be classified as a worker (and so can never be offered for --repair).
+  case $comm in
+    lsphp|lsphp[0-9]*|php-fpm|php-fpm[0-9.]*) : ;;
+    *) continue ;;
+  esac
   exe=$(read_exe "$pid")
   deleted=0; [[ $exe == *" (deleted)" ]] && deleted=1
   exepath=${exe% (deleted)}
+  # When /proc/PID/exe is readable, confirm the executable really is an
+  # lsphp/php-fpm binary; a process that only shares the comm name is skipped.
+  if [[ -n $exepath ]]; then
+    case ${exepath##*/} in
+      lsphp|php-fpm) : ;;
+      *) continue ;;
+    esac
+  fi
+  # the FPM master ("master process" in args) is managed, not a stale leaf
+  if   [[ $args == *"master process"* ]]; then kind="php-fpm(master)"
+  elif [[ $comm == php-fpm* ]];           then kind="php-fpm"
+  else                                         kind="lsphp"; fi
   [[ -z $exepath ]] && exepath="-"   # sentinel: a tab IFS in read() would otherwise drop an empty field
   workers+="$pid"$'\t'"$ppid"$'\t'"$uid"$'\t'"$et"$'\t'"$kind"$'\t'"$exepath"$'\t'"$deleted"$'\n'
-done < <(ps_snapshot)
+done <<<"$snap"
 workers=${workers%$'\n'}
 
 if [[ -z $workers ]]; then
@@ -220,7 +250,7 @@ now=$(now_epoch)
 fail=0; warn=0; unknown=0; master_stale=0
 confirmed_pids=""   # leaf workers on a "(deleted)" binary — the only PIDs --repair will act on
 mismatch_pids=""    # leaf workers whose binary mtime is newer than their start, NOT deleted (unverified)
-declare -A ROW_KIND ROW_ACCT ROW_DACCT ROW_EXE ROW_AGE ROW_VERDICT
+declare -A ROW_KIND ROW_DACCT ROW_EXE ROW_AGE ROW_VERDICT
 
 printf '%-8s %-15s %-16s %-9s %-10s %s\n' PID HANDLER ACCOUNT AGE VERDICT EXECUTABLE
 while IFS=$'\t' read -r pid ppid uid et kind exepath deleted; do
@@ -246,7 +276,7 @@ while IFS=$'\t' read -r pid ppid uid et kind exepath deleted; do
   fi
   disp_exe=$exepath; [[ $exepath == "-" ]] && disp_exe="(unreadable)"
   (( deleted )) && disp_exe="$disp_exe (deleted)"
-  ROW_KIND[$pid]=$kind; ROW_ACCT[$pid]=$acct; ROW_DACCT[$pid]=$dacct
+  ROW_KIND[$pid]=$kind; ROW_DACCT[$pid]=$dacct
   ROW_EXE[$pid]=$disp_exe
   ROW_AGE[$pid]=$age; ROW_VERDICT[$pid]=$verdict
   printf '%-8s %-15s %-16s %-9s %-10s %s\n' "$pid" "$kind" "$dacct" "$age" "$verdict" "$disp_exe"
@@ -266,7 +296,11 @@ if (( unknown > 0 )); then
   st INFO "$unknown worker(s) whose /proc/PID/exe could not be read (permissions or the process exited) — re-run as root"
 fi
 if (( fail == 0 && warn == 0 && master_stale == 0 )); then
-  st OK "no worker is running a stale binary"
+  if (( unknown > 0 )); then
+    st INFO "no stale worker was confirmed, but the scan is INCOMPLETE — $unknown worker(s) could not be read (see above); this is not a clean result, re-run as root"
+  else
+    st OK "no worker is running a stale binary"
+  fi
 fi
 echo
 echo "Note: a \"(deleted)\" executable proves only that the running file was replaced on disk — usually a PHP update, but also e.g. an in-place package rebuild that did not change the version. It does not by itself prove the worker is running an OLDER release. Confirm the version actually served with an uncached phpinfo on the site (a response header like X-Powered-By may be disabled, stripped or cached) before assuming it is wrong."
@@ -315,14 +349,17 @@ EOF
 if [[ $MODE == plan ]]; then
   hr "Repair plan (no changes made)"
   cp=${confirmed_pids% }; mp=${mismatch_pids% }
-  if [[ -z $cp && -z $mp ]]; then
-    st OK "nothing to recycle"
-  else
+  if [[ -n $cp || -n $mp ]] || (( master_stale > 0 )); then
+    (( master_stale > 0 )) && echo "Stale php-fpm MASTER(s) present: restart the affected version's FPM service (see below) — a per-worker kill will NOT help a master."
     [[ -n $cp ]] && echo "Confirmed-stale leaf worker PID(s) (--repair --pid N prints the exact command for one): $cp"
     [[ -n $mp ]] && echo "Unverified mismatch PID(s) (confirm the served version first; not eligible for --repair): $mp"
     remediation_text
+  elif (( unknown > 0 )); then
+    st INFO "nothing confirmed to recycle, but the scan is INCOMPLETE ($unknown worker(s) unreadable) — re-run as root before concluding"
+  else
+    st OK "nothing to recycle"
   fi
-  (( fail > 0 || master_stale > 0 )) && exit 2; (( warn > 0 )) && exit 1; exit 0
+  (( fail > 0 || master_stale > 0 )) && exit 2; (( warn > 0 )) && exit 1; (( unknown > 0 )) && exit 3; exit 0
 fi
 
 if [[ $MODE == repair ]]; then
@@ -335,9 +372,10 @@ if [[ $MODE == repair ]]; then
     *" $TARGET_PID "*) : ;;
     *) echo "PID $TARGET_PID is not a confirmed-stale leaf worker in this scan (only workers whose executable is marked \"(deleted)\" qualify). Re-run the audit." >&2; exit 4 ;;
   esac
-  acct=${ROW_ACCT[$TARGET_PID]:-unknown}
-  echo "This build is AUDIT-ONLY: it has been checked against controlled fixtures but not yet"
-  echo "on a production cPanel/LiteSpeed server, so it does NOT terminate the process for you."
+  acct=${ROW_DACCT[$TARGET_PID]:-unknown}   # honour --redact in advisory output too
+  echo "This build is AUDIT-ONLY and does NOT terminate the process for you. The normal-state"
+  echo "audit is verified on a live cPanel server; stale-worker detection is validated through"
+  echo "controlled fixtures. Recycling stays a deliberate step you run and watch."
   echo "For the confirmed-stale worker PID $TARGET_PID (${ROW_KIND[$TARGET_PID]}, account $acct), run and watch:"
   echo
   echo "    kill -TERM $TARGET_PID"
