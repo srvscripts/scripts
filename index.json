@@ -4,18 +4,6 @@
     "generated": "2026-10-25T22:46:03+00:00",
     "scripts": [
         {
-            "slug": "web-log-top-ips",
-            "title": "Access Log Top IPs and Bots Report",
-            "file": "web-log-top-ips.sh",
-            "url": "https://scr.srvscripts.com/web-log-top-ips/web-log-top-ips.sh",
-            "sha256": "ba9e293083311acdabb99373082678fd18f21201106b509763254551d0845be6",
-            "page": "https://srvscripts.com/scripts/web-log-top-ips/",
-            "language": "Bash",
-            "version": "1.0.0",
-            "updated": "2026-10-05",
-            "summary": "An access log top IPs report for Apache, LiteSpeed and Nginx: top IPs, agents, URLs, fake Googlebots, 404/5xx and wp-login or xmlrpc floods for the last minutes or hours, across all vhosts."
-        },
-        {
             "slug": "ad-change-audit-reporter",
             "title": "AD Change Audit Reporter: Find Who Changed Active Directory (PowerShell)",
             "file": "Get-ADChangeAudit.ps1",
@@ -38,6 +26,18 @@
             "version": "1.0.0",
             "updated": "2026-10-09",
             "summary": "Free PowerShell script that runs dcdiag, repadmin /replsummary, w32tm and SYSVOL DFSR checks on every DC and saves a colour-coded HTML report."
+        },
+        {
+            "slug": "ad-locked-out-users-report",
+            "title": "Locked Out AD Users Report: PowerShell Script with Lockout Source",
+            "file": "Get-ADLockoutReport.ps1",
+            "url": "https://scr.srvscripts.com/ad-locked-out-users-report/Get-ADLockoutReport.ps1",
+            "sha256": "7ec7bb73e5d28de582ea2e9aa6a564452551b9e2de6f2827b4a897201e863a70",
+            "page": "https://srvscripts.com/scripts/ad-locked-out-users-report/",
+            "language": "PowerShell",
+            "version": "1.0.0",
+            "updated": "2026-10-09",
+            "summary": "Free PowerShell script that lists locked-out AD users, reads event 4740 on the PDC emulator for the caller computer, and can unlock safely with -WhatIf."
         },
         {
             "slug": "ad-nested-group-membership",
@@ -73,7 +73,7 @@
             "language": "Bash",
             "version": "1.2.2",
             "updated": "2026-10-09",
-            "summary": "Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, \u00b5-law, SLN) to small mono MP3 files from cron, verifies each file and keeps the FreePBX call log player working."
+            "summary": "Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, µ-law, SLN) to small mono MP3 files from cron, verifies each file and keeps the FreePBX call log player working."
         },
         {
             "slug": "asterisk-security-audit",
@@ -110,30 +110,6 @@
             "version": "2.1.2",
             "updated": "2026-10-19",
             "summary": "A backup verify script that checks every account and database series: fresh, not shrinking, opens cleanly, and present for every expected account. Anything it cannot test is a failure."
-        },
-        {
-            "slug": "rdp-brute-force-blocker",
-            "title": "Block RDP Brute Force on Windows Server: PowerShell Script",
-            "file": "Block-RdpBruteForce.ps1",
-            "url": "https://scr.srvscripts.com/rdp-brute-force-blocker/Block-RdpBruteForce.ps1",
-            "sha256": "0f413709fc7102e3f2864d495fa4385b131e5cca8004fa5c95ffc7781e262476",
-            "page": "https://srvscripts.com/scripts/rdp-brute-force-blocker/",
-            "language": "PowerShell",
-            "version": "1.0.1",
-            "updated": "2026-10-09",
-            "summary": "Free PowerShell script that reads failed RDP logons (event 4625), counts them per source IP and blocks repeat offenders with Windows Firewall rules, with allow-list and -WhatIf."
-        },
-        {
-            "slug": "recording-retention-cleaner",
-            "title": "Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings",
-            "file": "recording-retention-cleaner.sh",
-            "url": "https://scr.srvscripts.com/recording-retention-cleaner/recording-retention-cleaner.sh",
-            "sha256": "25a23f2effd330e89c9d6f6f708fa6a1cda820f4d8e69b494863a59acf3d13ac",
-            "page": "https://srvscripts.com/scripts/recording-retention-cleaner/",
-            "language": "Bash",
-            "version": "1.0.1",
-            "updated": "2026-10-18",
-            "summary": "A Bash script that enforces a retention period on Asterisk and FreePBX call recordings. It is a dry run by default, can archive old recordings into a verified tar.gz before deleting them, skips calls still being recorded, can stop the FreePBX call log linking to removed files, and can run only when the disk is filling up."
         },
         {
             "slug": "cpanel-account-inventory",
@@ -196,6 +172,18 @@
             "summary": "Free PowerShell script that lists inactive Microsoft Entra ID users from signInActivity, with guests, licensed-only and never-signed-in filters and CSV output."
         },
         {
+            "slug": "exim-mail-queue-report",
+            "title": "Exim Mail Queue Report",
+            "file": "exim-mail-queue-report.sh",
+            "url": "https://scr.srvscripts.com/exim-mail-queue-report/exim-mail-queue-report.sh",
+            "sha256": "5c9156a4cae34ecd9cbd0e308ce1e3ffd80901cd5f6fb3fb80c81e30cfd4123a",
+            "page": "https://srvscripts.com/scripts/exim-mail-queue-report/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-09",
+            "summary": "Find out what is filling the Exim queue on a cPanel server: top senders, recipient domains, authenticated users, sending scripts and delivery errors from the last 24 hours, with an optional frozen-message purge."
+        },
+        {
             "slug": "exo-mailbox-permissions-report",
             "title": "Exchange Online Mailbox Permissions Report: FullAccess, SendAs",
             "file": "Get-EXOMailboxPermissionReport.ps1",
@@ -218,18 +206,6 @@
             "version": "1.0.0",
             "updated": "2026-10-09",
             "summary": "Free PowerShell script for Exchange Online message trace with Get-MessageTraceV2: 10-day slicing, 5,000-row continuation, throttle handling and CSV export."
-        },
-        {
-            "slug": "exim-mail-queue-report",
-            "title": "Exim Mail Queue Report",
-            "file": "exim-mail-queue-report.sh",
-            "url": "https://scr.srvscripts.com/exim-mail-queue-report/exim-mail-queue-report.sh",
-            "sha256": "5c9156a4cae34ecd9cbd0e308ce1e3ffd80901cd5f6fb3fb80c81e30cfd4123a",
-            "page": "https://srvscripts.com/scripts/exim-mail-queue-report/",
-            "language": "Bash",
-            "version": "1.0.0",
-            "updated": "2026-10-09",
-            "summary": "Find out what is filling the Exim queue on a cPanel server: top senders, recipient domains, authenticated users, sending scripts and delivery errors from the last 24 hours, with an optional frozen-message purge."
         },
         {
             "slug": "export-ad-users-csv",
@@ -304,16 +280,28 @@
             "summary": "Free PowerShell script that finds AD accounts allowing or requiring Kerberos RC4 and counts RC4 tickets issued by your DCs (events 4769/4768)."
         },
         {
-            "slug": "ad-locked-out-users-report",
-            "title": "Locked Out AD Users Report: PowerShell Script with Lockout Source",
-            "file": "Get-ADLockoutReport.ps1",
-            "url": "https://scr.srvscripts.com/ad-locked-out-users-report/Get-ADLockoutReport.ps1",
-            "sha256": "7ec7bb73e5d28de582ea2e9aa6a564452551b9e2de6f2827b4a897201e863a70",
-            "page": "https://srvscripts.com/scripts/ad-locked-out-users-report/",
+            "slug": "m365-mfa-status-report",
+            "title": "Microsoft 365 MFA Status Report: PowerShell Script for Graph",
+            "file": "Get-M365MfaReport.ps1",
+            "url": "https://scr.srvscripts.com/m365-mfa-status-report/Get-M365MfaReport.ps1",
+            "sha256": "8d1fe7b7281caec5bee6a47976da1e978cfc8eae88aa25e950463d445ad63023",
+            "page": "https://srvscripts.com/scripts/m365-mfa-status-report/",
             "language": "PowerShell",
             "version": "1.0.0",
             "updated": "2026-10-09",
-            "summary": "Free PowerShell script that lists locked-out AD users, reads event 4740 on the PDC emulator for the caller computer, and can unlock safely with -WhatIf."
+            "summary": "Free PowerShell script that reports MFA registration, MFA capable, default method, admin flag, licence and last sign-in for every Microsoft 365 user via Microsoft Graph."
+        },
+        {
+            "slug": "m365-user-offboarding",
+            "title": "Microsoft 365 User Offboarding PowerShell Script (with -WhatIf)",
+            "file": "Invoke-M365Offboarding.ps1",
+            "url": "https://scr.srvscripts.com/m365-user-offboarding/Invoke-M365Offboarding.ps1",
+            "sha256": "34350f40d41c141cff54e00348202a69909dfe3a9883ac283c3c37486d544de7",
+            "page": "https://srvscripts.com/scripts/m365-user-offboarding/",
+            "language": "PowerShell",
+            "version": "1.1.0",
+            "updated": "2026-10-09",
+            "summary": "Free PowerShell script for Microsoft 365 offboarding: block sign-in, revoke sessions, shared mailbox, auto-reply, forward to manager, groups and licences, with -WhatIf and a log."
         },
         {
             "slug": "mariadb-slow-query-summary",
@@ -338,30 +326,6 @@
             "version": "1.0.0",
             "updated": "2026-10-18",
             "summary": "A Bash watchdog for MariaDB and MySQL: checks that the server answers SELECT 1 within a time limit, saves diagnostics, and restarts only when you allow it and only when it is safe: not during startup or crash recovery, not during a backup, at most twice an hour. Report-only by default."
-        },
-        {
-            "slug": "m365-mfa-status-report",
-            "title": "Microsoft 365 MFA Status Report: PowerShell Script for Graph",
-            "file": "Get-M365MfaReport.ps1",
-            "url": "https://scr.srvscripts.com/m365-mfa-status-report/Get-M365MfaReport.ps1",
-            "sha256": "8d1fe7b7281caec5bee6a47976da1e978cfc8eae88aa25e950463d445ad63023",
-            "page": "https://srvscripts.com/scripts/m365-mfa-status-report/",
-            "language": "PowerShell",
-            "version": "1.0.0",
-            "updated": "2026-10-09",
-            "summary": "Free PowerShell script that reports MFA registration, MFA capable, default method, admin flag, licence and last sign-in for every Microsoft 365 user via Microsoft Graph."
-        },
-        {
-            "slug": "m365-user-offboarding",
-            "title": "Microsoft 365 User Offboarding PowerShell Script (with -WhatIf)",
-            "file": "Invoke-M365Offboarding.ps1",
-            "url": "https://scr.srvscripts.com/m365-user-offboarding/Invoke-M365Offboarding.ps1",
-            "sha256": "34350f40d41c141cff54e00348202a69909dfe3a9883ac283c3c37486d544de7",
-            "page": "https://srvscripts.com/scripts/m365-user-offboarding/",
-            "language": "PowerShell",
-            "version": "1.1.0",
-            "updated": "2026-10-09",
-            "summary": "Free PowerShell script for Microsoft 365 offboarding: block sign-in, revoke sessions, shared mailbox, auto-reply, forward to manager, groups and licences, with -WhatIf and a log."
         },
         {
             "slug": "mysql-health-snapshot",
@@ -434,6 +398,30 @@
             "version": "1.0.0",
             "updated": "2026-10-11",
             "summary": "A read-only Bash script that samples /proc twice and shows which accounts and processes are using the CPU, memory and disk, with each account's domain on cPanel and DirectAdmin, the I/O wait, stuck processes, and a cron mode that only reports when the load is high."
+        },
+        {
+            "slug": "rdp-brute-force-blocker",
+            "title": "Block RDP Brute Force on Windows Server: PowerShell Script",
+            "file": "Block-RdpBruteForce.ps1",
+            "url": "https://scr.srvscripts.com/rdp-brute-force-blocker/Block-RdpBruteForce.ps1",
+            "sha256": "0f413709fc7102e3f2864d495fa4385b131e5cca8004fa5c95ffc7781e262476",
+            "page": "https://srvscripts.com/scripts/rdp-brute-force-blocker/",
+            "language": "PowerShell",
+            "version": "1.0.1",
+            "updated": "2026-10-09",
+            "summary": "Free PowerShell script that reads failed RDP logons (event 4625), counts them per source IP and blocks repeat offenders with Windows Firewall rules, with allow-list and -WhatIf."
+        },
+        {
+            "slug": "recording-retention-cleaner",
+            "title": "Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings",
+            "file": "recording-retention-cleaner.sh",
+            "url": "https://scr.srvscripts.com/recording-retention-cleaner/recording-retention-cleaner.sh",
+            "sha256": "25a23f2effd330e89c9d6f6f708fa6a1cda820f4d8e69b494863a59acf3d13ac",
+            "page": "https://srvscripts.com/scripts/recording-retention-cleaner/",
+            "language": "Bash",
+            "version": "1.0.1",
+            "updated": "2026-10-18",
+            "summary": "A Bash script that enforces a retention period on Asterisk and FreePBX call recordings. It is a dry run by default, can archive old recordings into a verified tar.gz before deleting them, skips calls still being recorded, can stop the FreePBX call log linking to removed files, and can run only when the disk is filling up."
         },
         {
             "slug": "redirect-tester",
@@ -529,7 +517,7 @@
             "language": "Bash",
             "version": "1.1.0",
             "updated": "2026-10-18",
-            "summary": "Checks the live TLS certificate on any list of hosts \u2014 web, mail with STARTTLS, or every domain on a cPanel server \u2014 and warns before they expire. One line per host, cron-friendly exit codes."
+            "summary": "Checks the live TLS certificate on any list of hosts — web, mail with STARTTLS, or every domain on a cPanel server — and warns before they expire. One line per host, cron-friendly exit codes."
         },
         {
             "slug": "voip-toll-fraud-watch",
@@ -544,6 +532,18 @@
             "summary": "A Bash script that reads the Asterisk or FreePBX call records every few minutes and raises an alarm on the patterns of toll fraud: bursts of international or premium-rate calls, long international talk time, calls outside office hours, one extension making far more calls than usual, and transit calls that come in on a trunk and go straight back out."
         },
         {
+            "slug": "web-log-top-ips",
+            "title": "Access Log Top IPs and Bots Report",
+            "file": "web-log-top-ips.sh",
+            "url": "https://scr.srvscripts.com/web-log-top-ips/web-log-top-ips.sh",
+            "sha256": "ba9e293083311acdabb99373082678fd18f21201106b509763254551d0845be6",
+            "page": "https://srvscripts.com/scripts/web-log-top-ips/",
+            "language": "Bash",
+            "version": "1.0.0",
+            "updated": "2026-10-05",
+            "summary": "An access log top IPs report for Apache, LiteSpeed and Nginx: top IPs, agents, URLs, fake Googlebots, 404/5xx and wp-login or xmlrpc floods for the last minutes or hours, across all vhosts."
+        },
+        {
             "slug": "wordpress-version-audit",
             "title": "WordPress Version Audit: Find Every WordPress Site and Its Version",
             "file": "wordpress-version-audit.sh",
@@ -554,6 +554,18 @@
             "version": "1.1.0",
             "updated": "2026-10-09",
             "summary": "Free bash script that finds every WordPress install on cPanel, DirectAdmin or plain servers and flags core versions below 7.0.3 (CVE-2026-64638)."
+        },
+        {
+            "file": "cpanel-php-stale-worker-check.sh",
+            "language": "Bash",
+            "page": "https://srvscripts.com/scripts/cpanel-php-stale-worker-check/",
+            "sha256": "244105e07be789a3f95a643d554b0186babdf68b01cf21ccd59679cc649ff6fd",
+            "slug": "cpanel-php-stale-worker-check",
+            "summary": "Finds PHP (lsphp / php-fpm) workers still running a binary that a PHP update replaced on disk — the reason a cPanel site keeps reporting the old PHP version after an update. Read-only and audit-only: it reports confirmed-stale vs unverified mismatches and prints the exact recycle command, but does not terminate processes itself.",
+            "title": "cPanel PHP Stale-Worker Check",
+            "updated": "2026-10-28",
+            "url": "https://scr.srvscripts.com/cpanel-php-stale-worker-check/cpanel-php-stale-worker-check.sh",
+            "version": "1.0.0"
         }
     ]
 }
