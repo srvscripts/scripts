@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cPanel PHP Stale-Worker Check (v1.0.2) - from srvScripts.com
+# cPanel PHP Stale-Worker Check (v1.0.3) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/cpanel-php-stale-worker-check/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # cpanel-php-stale-worker-check.sh — find PHP workers still running a replaced (stale) binary
@@ -43,7 +43,7 @@
 set -uo pipefail
 export LC_ALL=C
 
-VERSION=1.0.2
+VERSION=1.0.3
 R=${SRVS_ROOT:-}
 TESTMODE=0; [[ -n $R ]] && TESTMODE=1
 
@@ -263,8 +263,12 @@ while IFS=$'\t' read -r pid ppid uid et kind exepath deleted; do
   age=$(human_age "$et")
   verdict="ok"
   if [[ $kind == "php-fpm(master)" ]]; then
-    verdict="master"                          # the FPM master is managed; a per-worker kill won't help it
-    (( deleted )) && { verdict="master*"; master_stale=$(( master_stale+1 )); }
+    # Keep the master identity in the HANDLER column, but an unreadable master is
+    # inconclusive (we cannot tell whether it is stale) — count it as unknown so the
+    # scan is reported INCOMPLETE, exactly like an unreadable leaf worker.
+    if   [[ $exepath == "-" ]]; then verdict="master?"; unknown=$(( unknown+1 ))
+    elif (( deleted ));         then verdict="master*"; master_stale=$(( master_stale+1 ))
+    else                             verdict="master"; fi
   elif (( deleted )); then
     verdict="STALE"; fail=$(( fail+1 )); confirmed_pids+="$pid "
   elif [[ $exepath == "-" ]]; then
@@ -337,11 +341,18 @@ Remediation is handler-specific — match it to the row's HANDLER:
             kill -TERM <PID>
         SIGTERM is not guaranteed graceful for every handler configuration.
         See: https://srvscripts.com/guides/litespeed-stuck-lsphp-processes/
-      - web server (recycles its workers in one step, briefly disrupts every site;
-        use a maintenance window). Note this recycles the server's OWN workers; an
-        independently managed PHP-FPM service is restarted separately (above):
-            systemctl restart httpd        # Apache
-            # or: systemctl restart lsws   # LiteSpeed Enterprise
+      - the whole handler, when several of its workers are affected (briefly disrupts
+        every site on that handler; use a maintenance window). The command differs by
+        handler, so match it to yours:
+            Apache / mod_lsapi:  systemctl restart httpd   # recycles its lsphp workers
+            LiteSpeed:           a plain "systemctl restart lsws" may NOT recycle lsphp
+                                 run in detached/external mode (the usual LiteSpeed
+                                 setup). Use LiteSpeed's own PHP restart instead
+                                 (WebAdmin > Restart PHP, or the per-account marker),
+                                 or recycle the single PID as above:
+                                     touch /home/<account>/.lsphp_restart.txt
+        An independently managed PHP-FPM service is restarted separately (see MASTER above):
+            systemctl restart ea-phpNN-php-fpm
 
   Do NOT reboot the server just to refresh PHP workers, and do NOT run
   "killall lsphp" on a shared host — that drops every account's in-flight requests.

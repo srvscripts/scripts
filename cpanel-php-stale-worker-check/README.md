@@ -4,7 +4,7 @@ Finds PHP (lsphp / php-fpm) workers still running a binary that a PHP update rep
 
 **Full documentation, example output and troubleshooting:** <https://srvscripts.com/scripts/cpanel-php-stale-worker-check/>
 
-Version 1.0.2 · updated 2026-10-29 · Fixtures + live cPanel audit (audit mode)
+Version 1.0.3 · updated 2026-10-29 · Fixtures + live cPanel audit (audit mode)
 
 ## Download, verify and run
 
