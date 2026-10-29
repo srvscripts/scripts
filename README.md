@@ -22,7 +22,7 @@ Every release is tagged `<script-folder>/v<version>`. What changed is in [CHANGE
 | [Call Recording Retention Cleaner: Delete or Archive Old FreePBX Recordings](https://srvscripts.com/scripts/recording-retention-cleaner/) | [`recording-retention-cleaner.sh`](recording-retention-cleaner/recording-retention-cleaner.sh) | 1.0.1 |
 | [cPanel Account Inventory](https://srvscripts.com/scripts/cpanel-account-inventory/) | [`cpanel-account-inventory.sh`](cpanel-account-inventory/cpanel-account-inventory.sh) | 1.0.0 |
 | [cPanel Disk Usage Report](https://srvscripts.com/scripts/cpanel-disk-usage-report/) | [`cpanel-disk-usage-report.sh`](cpanel-disk-usage-report/cpanel-disk-usage-report.sh) | 1.0.0 |
-| [cPanel PHP Stale-Worker Check](https://srvscripts.com/scripts/cpanel-php-stale-worker-check/) | [`cpanel-php-stale-worker-check.sh`](cpanel-php-stale-worker-check/cpanel-php-stale-worker-check.sh) | 1.1.0 |
+| [cPanel PHP Stale-Worker Check](https://srvscripts.com/scripts/cpanel-php-stale-worker-check/) | [`cpanel-php-stale-worker-check.sh`](cpanel-php-stale-worker-check/cpanel-php-stale-worker-check.sh) | 1.1.1 |
 | [cPanel PHP Version Audit](https://srvscripts.com/scripts/cpanel-php-version-audit/) | [`cpanel-php-version-audit.sh`](cpanel-php-version-audit/cpanel-php-version-audit.sh) | 1.0.0 |
 | [Disk and Inode Alert](https://srvscripts.com/scripts/disk-inode-alert/) | [`disk-inode-alert.sh`](disk-inode-alert/disk-inode-alert.sh) | 1.0.0 |
 | [Exim Mail Queue Report](https://srvscripts.com/scripts/exim-mail-queue-report/) | [`exim-mail-queue-report.sh`](exim-mail-queue-report/exim-mail-queue-report.sh) | 1.0.0 |

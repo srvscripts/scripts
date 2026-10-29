@@ -4,7 +4,7 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
-| 2026-10-29 | [cPanel PHP Stale-Worker Check](cpanel-php-stale-worker-check/CHANGELOG.md) | 1.1.0 | Added opt-in, read-only package and repository diagnostics (--pkg, plus --check-updates for the dnf query). On cPanel they report the installed EA-PHP branches  |
+| 2026-10-29 | [cPanel PHP Stale-Worker Check](cpanel-php-stale-worker-check/CHANGELOG.md) | 1.1.1 | Audit hardening from an independent review (behaviour of the default stale-worker scan is unchanged). Package diagnostics: the dnf update query runs with DNF_DI |
 | 2026-10-19 | [Backup Verify Script](backup-verify/CHANGELOG.md) | 2.1.2 | Header comment now shows the real version (it still said 2.1.0); no change to checks or output. |
 | 2026-10-18 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](voip-toll-fraud-watch/CHANGELOG.md) | 1.0.1 | On FreePBX, or with --source db, an unreadable CDR database is UNKNOWN (exit 3) instead of a fallback to Master.csv. Skipped transit check shown. Alerts retried |
 | 2026-10-18 | [SSL Expiry Check Script: Free Network Test for Web and Mail](ssl-expiry-check/CHANGELOG.md) | 1.1.0 | Also verifies the certificate chain and host name: self-signed, untrusted, incomplete-chain and wrong-host certificates are now reported as BAD (previously only |

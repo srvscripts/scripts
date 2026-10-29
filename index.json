@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-10-29T00:07:42+00:00",
+    "generated": "2026-10-29T00:51:07+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -164,10 +164,10 @@
             "title": "cPanel PHP Stale-Worker Check",
             "file": "cpanel-php-stale-worker-check.sh",
             "url": "https://scr.srvscripts.com/cpanel-php-stale-worker-check/cpanel-php-stale-worker-check.sh",
-            "sha256": "285fe25096952dfeb58d1b4f056b00b5a43f6d53da276e4b9d15317cb3bc7324",
+            "sha256": "01061bde33846ee81990fb6f2b6c99f02a82152c60adc1f499ff567245444a3c",
             "page": "https://srvscripts.com/scripts/cpanel-php-stale-worker-check/",
             "language": "Bash",
-            "version": "1.1.0",
+            "version": "1.1.1",
             "updated": "2026-10-29",
             "summary": "Read-only script that finds lsphp / php-fpm workers still running a replaced PHP binary after an update \u2014 the reason a cPanel site keeps reporting the old version."
         },

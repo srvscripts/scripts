@@ -4,7 +4,7 @@ Read-only script that finds lsphp / php-fpm workers still running a replaced PHP
 
 **Full documentation, example output and troubleshooting:** <https://srvscripts.com/scripts/cpanel-php-stale-worker-check/>
 
-Version 1.1.0 · updated 2026-10-29 · Lab-tested
+Version 1.1.1 · updated 2026-10-29 · Lab-tested
 
 ## Download, verify and run
 
@@ -42,10 +42,12 @@ Options:
                     paths are still shown — review output before sharing)
   --pkg             also run read-only package/repository diagnostics: installed
                     EA-PHP branches and versions, RPM epoch, the Imunify360 hardened
-                    repo and its enabled state, and dnf exclusions. All local, no
-                    network, nothing changed.
+                    repo and its enabled state, and dnf exclusions. Reads only; it
+                    changes no installed package, repo config or service (a --csv
+                    export is the one file it writes).
   --check-updates   with --pkg, also query dnf for available EA-PHP updates (needs
-                    network; read-only; never installs or applies anything)
+                    network). Read-only: it runs "dnf check-update" (which may refresh
+                    dnf's own cache/logs) and never installs, upgrades or enables a repo.
   --no-color        plain output even on a terminal
   -h, --help        this help
   -V, --version     print version

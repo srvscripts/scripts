@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cPanel PHP Stale-Worker Check (v1.1.0) - from srvScripts.com
+# cPanel PHP Stale-Worker Check (v1.1.1) - from srvScripts.com
 # Source, docs and updates: https://srvscripts.com/scripts/cpanel-php-stale-worker-check/
 # Copyright (c) 2026 srvScripts.com. MIT licence: if you copy, share or adapt this script, keep this notice and credit srvScripts.com.
 # cpanel-php-stale-worker-check.sh — find PHP workers still running a replaced (stale) binary
@@ -51,7 +51,7 @@
 set -uo pipefail
 export LC_ALL=C
 
-VERSION=1.1.0
+VERSION=1.1.1
 R=${SRVS_ROOT:-}
 TESTMODE=0; [[ -n $R ]] && TESTMODE=1
 
@@ -77,10 +77,12 @@ Options:
                     paths are still shown — review output before sharing)
   --pkg             also run read-only package/repository diagnostics: installed
                     EA-PHP branches and versions, RPM epoch, the Imunify360 hardened
-                    repo and its enabled state, and dnf exclusions. All local, no
-                    network, nothing changed.
+                    repo and its enabled state, and dnf exclusions. Reads only; it
+                    changes no installed package, repo config or service (a --csv
+                    export is the one file it writes).
   --check-updates   with --pkg, also query dnf for available EA-PHP updates (needs
-                    network; read-only; never installs or applies anything)
+                    network). Read-only: it runs "dnf check-update" (which may refresh
+                    dnf's own cache/logs) and never installs, upgrades or enables a repo.
   --no-color        plain output even on a terminal
   -h, --help        this help
   -V, --version     print version
@@ -139,7 +141,10 @@ ps_snapshot() {
     # etimes = seconds since the process started; comm = short name; args = full cmdline
     ps -eo pid=,ppid=,uid=,etimes=,comm=,args= 2>/dev/null \
       | awk '{ pid=$1; ppid=$2; uid=$3; et=$4; comm=$5; $1=$2=$3=$4=$5=""; sub(/^ +/,""); printf "%s\t%s\t%s\t%s\t%s\t%s\n", pid, ppid, uid, et, comm, $0 }'
-    return "${PIPESTATUS[0]}"             # propagate a ps failure (do not let it look like an empty list)
+    local pstat=( "${PIPESTATUS[@]}" )    # capture BOTH stages before the next command clobbers PIPESTATUS
+    (( pstat[0] != 0 )) && return "${pstat[0]}"   # ps failed
+    (( ${pstat[1]:-0} != 0 )) && return 3         # awk formatter failed -> incomplete, never a silent empty list
+    return 0
   fi
 }
 
@@ -196,10 +201,11 @@ human_age() { # seconds -> "2d 3h", "4h 10m", "7m", "<1m"
   else echo "<1m"; fi
 }
 
-# ---- package / repository diagnostics (opt-in with --pkg, strictly read-only)
-# Everything below only READS: rpm metadata, repo files, dnf config, and (only
-# with --check-updates) a `dnf check-update` query. It never enables a repo,
-# installs, upgrades or changes anything; it prints the commands for YOU to run.
+# ---- package / repository diagnostics (opt-in with --pkg) -------------------
+# Read-only: it inspects rpm metadata, repo files and dnf config, and (only with
+# --check-updates) runs `dnf check-update`, which may refresh dnf's own cache/logs
+# but changes no installed package, repo configuration or service. It never enables
+# a repo, installs or upgrades; it prints the recommended commands for YOU to run.
 pkg_list_eaphp() {            # EPOCH<TAB>NAME<TAB>VERSION<TAB>RELEASE<TAB>VENDOR
   if (( TESTMODE )); then
     [[ -f $R/rpm-ea-php.txt ]] || return 3
@@ -218,8 +224,8 @@ pkg_exclude_lines() {         # any exclude= lines in dnf/yum config or repo fil
   local files f
   if (( TESTMODE )); then files=( "$R/etc/dnf/dnf.conf" "$R/etc/yum.conf" )
   else files=( /etc/dnf/dnf.conf /etc/yum.conf ); fi
-  { for f in "${files[@]}"; do [[ -f $f ]] && grep -HnE '^[[:space:]]*exclude[[:space:]]*=' "$f"; done
-    pkg_repo_cat | grep -nE '^[[:space:]]*exclude[[:space:]]*='; } 2>/dev/null
+  { for f in "${files[@]}"; do [[ -f $f ]] && grep -HnE '^[[:space:]]*(exclude|excludepkgs)[[:space:]]*=' "$f"; done
+    pkg_repo_cat | grep -nE '^[[:space:]]*(exclude|excludepkgs)[[:space:]]*='; } 2>/dev/null
 }
 dnf_checkupdate() {           # $1 = repo-id to --enablerepo (or ""); prints lines
   if (( TESTMODE )); then     # rc: 0/100 ok, 3 no dnf, 7 no network, other skip
@@ -229,8 +235,23 @@ dnf_checkupdate() {           # $1 = repo-id to --enablerepo (or ""); prints lin
     return 0
   fi
   command -v dnf >/dev/null 2>&1 || return 3
-  if [[ -n $1 ]]; then timeout 90 dnf --enablerepo="$1" -q check-update 'ea-php*' 2>/dev/null
-  else timeout 90 dnf -q check-update 'ea-php*' 2>/dev/null; fi
+  # DNF_DISABLE_ALIASES stops a custom dnf alias (e.g. check-update aliased to an
+  # upgrade) from turning this read-only query into a package transaction.
+  if [[ -n $1 ]]; then DNF_DISABLE_ALIASES=1 timeout 90 dnf --enablerepo="$1" -q check-update 'ea-php*' 2>/dev/null
+  else DNF_DISABLE_ALIASES=1 timeout 90 dnf -q check-update 'ea-php*' 2>/dev/null; fi
+}
+
+pkg_hard_block() {            # stdin = repo text; $1 = exact section header "[id]" to match,
+  awk -v want="$1" '          # or "" to match any section id containing "hardened". Prints ID=.. then enabled=..
+    /^\[/{
+      inblk=0; hdr=$0
+      if (want != "") { if (hdr==want) inblk=1 }
+      else if (hdr ~ /[Hh]ardened/) inblk=1
+      if (inblk) { id=hdr; gsub(/[][]/,"",id); print "ID="id }
+      next
+    }
+    inblk && /^[[:space:]]*enabled[[:space:]]*=/{ l=$0; gsub(/[[:space:]]/,"",l); print l; }
+  '
 }
 
 pkg_diag() {
@@ -242,12 +263,13 @@ pkg_diag() {
   fi
 
   echo "Installed EA-PHP runtime packages (epoch:version-release):"
-  local hardened_installed=0 ep name ver rel vendor e flag any=0
+  local hardened_installed=0 has_epoch1=0 ep name ver rel vendor e flag any=0
   while IFS=$'\t' read -r ep name ver rel vendor; do
     [[ -n $name ]] || continue
     [[ $name =~ ^ea-php[0-9]+-php$ ]] || continue      # the per-branch runtime package
     e=$ep; { [[ $ep == "(none)" ]] || [[ -z $ep ]]; } && e=0
     [[ $e =~ ^[0-9]+$ ]] || e=0        # defensive: any non-numeric epoch -> 0
+    (( e >= 1 )) && has_epoch1=1       # a real epoch>=1 is tracked apart from vendor/release provenance
     flag=""
     if (( e >= 1 )) || [[ $rel == *cloudlinux* ]] || [[ $vendor == *CloudLinux* ]]; then
       flag=" [hardened]"; hardened_installed=1
@@ -257,13 +279,12 @@ pkg_diag() {
   (( any )) || echo "  (no ea-phpNN-php runtime package matched; only components installed)"
 
   hr "Imunify360 hardened PHP repository"
-  local repos hard_block enabled rid
+  local repos hard_block enabled_raw enabled_lc rid hard_disabled=0
   repos=$(pkg_repo_cat)
-  hard_block=$(awk '
-    /^\[/{ inblk=0 }
-    /^\[.*[Hh]ardened.*\]/{ inblk=1; id=$0; gsub(/[][]/,"",id); print "ID="id; next }
-    inblk && /^[[:space:]]*enabled[[:space:]]*=/{ gsub(/[[:space:]]/,""); print; }
-  ' <<<"$repos" 2>/dev/null)
+  # Prefer the exact imunify360-ea-php-hardened repo; only fall back to any *hardened*
+  # id when the real one is absent, so a "…-hardened-beta" never gets selected over it.
+  hard_block=$(pkg_hard_block '[imunify360-ea-php-hardened]' <<<"$repos")
+  [[ -z $hard_block ]] && hard_block=$(pkg_hard_block '' <<<"$repos")
   rid=$(sed -n 's/^ID=//p' <<<"$hard_block" | head -1)
   if [[ -z $hard_block ]]; then
     if (( hardened_installed )); then
@@ -272,22 +293,32 @@ pkg_diag() {
       st INFO "no Imunify360 hardened PHP repository configured (standard EA4 packaging)"
     fi
   else
-    enabled=$(sed -n 's/^enabled=//p' <<<"$hard_block" | head -1)
-    if [[ $enabled == 0 ]]; then
-      st WARN "hardened repo '$rid' is present but DISABLED (enabled=0) — the epoch-1 hardened PHP updates it ships are hidden from a normal 'dnf update'"
-    else
-      st OK "hardened repo '$rid' is present and enabled"
-    fi
+    enabled_raw=$(sed -n 's/^enabled=//p' <<<"$hard_block" | head -1)
+    enabled_lc=$(printf '%s' "$enabled_raw" | tr 'A-Z' 'a-z')
+    case $enabled_lc in
+      0|false|no|off) hard_disabled=1
+        st WARN "hardened repo '$rid' is present but DISABLED (enabled=$enabled_raw) — the hardened PHP updates it ships are hidden from a normal 'dnf update'" ;;
+      1|true|yes|on)
+        st OK "hardened repo '$rid' is present and enabled" ;;
+      *)
+        st INFO "hardened repo '$rid' is present but its enabled= value ('$enabled_raw') is not a recognised boolean — check it by hand" ;;
+    esac
   fi
 
-  if (( hardened_installed )); then
+  if (( has_epoch1 )); then
     hr "RPM epoch"
-    echo "Installed hardened EA-PHP packages carry RPM epoch >= 1. Epoch is compared"
-    echo "BEFORE version, so a standard EA4 package (epoch 0) can never replace them, even"
-    echo "with a higher version number — which is why 'dnf update' can report nothing while"
-    echo "a newer hardened build exists. Update them FROM the hardened repo (see below); do"
+    echo "At least one installed hardened EA-PHP package carries RPM epoch >= 1. Epoch is"
+    echo "compared BEFORE version, so a standard EA4 package (epoch 0) can never replace it,"
+    echo "even with a higher version number -- which is why 'dnf update' can report nothing"
+    echo "while a newer hardened build exists. Update from the hardened repo (see below); do"
     echo "NOT force a switch to standard EA4 with --allowerasing: that strips the hardening"
     echo "and can break dependencies."
+  elif (( hardened_installed )); then
+    hr "RPM epoch"
+    echo "Some installed EA-PHP packages look hardened by vendor/release (CloudLinux) but"
+    echo "show epoch 0. The epoch-before-version blocking below applies only when an"
+    echo "installed package's epoch is actually >= 1 -- verify the real epoch and package"
+    echo "source before changing anything."
   fi
 
   local ex; ex=$(pkg_exclude_lines)
@@ -309,11 +340,15 @@ pkg_diag() {
           echo "From the currently ENABLED repos:"; echo "$out"
         else
           st OK "no EA-PHP updates from the currently enabled repos"
-          if (( hardened_installed )) && [[ -n $rid ]] && [[ $enabled == 0 ]]; then
+          if (( hardened_installed )) && [[ -n $rid ]] && (( hard_disabled )); then
             local ho hrc; ho=$(dnf_checkupdate "$rid"); hrc=$?
             if { [[ $hrc == 0 ]] || [[ $hrc == 100 ]]; } && [[ -n $ho ]]; then
               hr "Hidden by the disabled hardened repo"
               echo "With --enablerepo=$rid, dnf WOULD offer:"; echo "$ho"
+            elif (( hrc == 7 )); then
+              st INFO "could not query the disabled hardened repo '$rid' (no network) — enable it and re-check"
+            elif (( hrc != 0 && hrc != 100 )); then
+              st INFO "could not query the disabled hardened repo '$rid' (dnf exit $hrc) — check it by hand"
             fi
           fi
         fi ;;
@@ -379,6 +414,7 @@ fi
 
 # Collect worker rows: pid ppid uid etimes kind exepath deleted(0/1)
 workers=""
+master_pids=""   # pids classified as php-fpm masters, to validate a leaf worker's parent
 while IFS=$'\t' read -r pid ppid uid et comm args; do
   [[ -n $pid ]] || continue
   # Identify a real PHP worker by its process NAME (comm = the executable's own
@@ -408,6 +444,7 @@ while IFS=$'\t' read -r pid ppid uid et comm args; do
   elif [[ $comm == php-fpm* ]] && [[ $ppid == 1 ]];         then kind="php-fpm(master)"
   elif [[ $comm == php-fpm* ]];                             then kind="php-fpm"
   else                                                           kind="lsphp"; fi
+  [[ $kind == "php-fpm(master)" ]] && master_pids+="$pid "
   [[ -z $exepath ]] && exepath="-"   # sentinel: a tab IFS in read() would otherwise drop an empty field
   workers+="$pid"$'\t'"$ppid"$'\t'"$uid"$'\t'"$et"$'\t'"$kind"$'\t'"$exepath"$'\t'"$deleted"$'\n'
 done <<<"$snap"
@@ -422,7 +459,7 @@ if [[ -z $workers ]]; then
 fi
 
 now=$(now_epoch)
-fail=0; warn=0; unknown=0; master_stale=0
+fail=0; warn=0; unknown=0; master_stale=0; uncertain=0
 confirmed_pids=""   # leaf workers on a "(deleted)" binary — the only PIDs --repair will act on
 mismatch_pids=""    # leaf workers whose binary mtime is newer than their start, NOT deleted (unverified)
 declare -A ROW_KIND ROW_DACCT ROW_EXE ROW_AGE ROW_VERDICT
@@ -442,7 +479,16 @@ while IFS=$'\t' read -r pid ppid uid et kind exepath deleted; do
     elif (( deleted ));         then verdict="master*"; master_stale=$(( master_stale+1 ))
     else                             verdict="master"; fi
   elif (( deleted )); then
-    verdict="STALE"; fail=$(( fail+1 )); confirmed_pids+="$pid "
+    # A php-fpm leaf is only safe to CONFIRM (and later offer to --repair) when its
+    # parent is a detected FPM master. A php-fpm on a replaced binary whose parent is
+    # neither a detected master nor init (pid 1) may itself be a mis-titled master, so
+    # withhold it from --repair rather than print a kill for it. (lsphp is spawned by
+    # the web server, not forked from an FPM master, so it stays a confirmable leaf.)
+    if [[ $kind == php-fpm ]] && [[ $ppid != 1 ]] && [[ " $master_pids " != *" $ppid "* ]]; then
+      verdict="stale?"; uncertain=$(( uncertain+1 ))
+    else
+      verdict="STALE"; fail=$(( fail+1 )); confirmed_pids+="$pid "
+    fi
   elif [[ $exepath == "-" ]]; then
     verdict="unknown"; unknown=$(( unknown+1 ))   # could not read /proc/PID/exe (perms/race)
   elif [[ $et =~ ^[0-9]+$ ]]; then
@@ -474,7 +520,10 @@ fi
 if (( unknown > 0 )); then
   st INFO "$unknown worker(s) whose /proc/PID/exe could not be read (permissions or the process exited) — re-run as root"
 fi
-if (( fail == 0 && warn == 0 && master_stale == 0 )); then
+if (( uncertain > 0 )); then
+  st WARN "$uncertain php-fpm worker(s) on a replaced binary whose parent is not a detected FPM master — NOT offered for recycling (one could be a mis-titled master). Restart the owning FPM service, or verify the process tree before acting."
+fi
+if (( fail == 0 && warn == 0 && master_stale == 0 && uncertain == 0 )); then
   if (( unknown > 0 )); then
     st INFO "no stale worker was confirmed, but the scan is INCOMPLETE — $unknown worker(s) could not be read (see above); this is not a clean result, re-run as root"
   else
@@ -493,7 +542,9 @@ if [[ -n $CSV ]]; then
     done | sort -t, -k5,5
   }
   if [[ $CSV == - ]]; then echo; csv_out
-  elif csv_out > "$CSV"; then st INFO "CSV written to $CSV — it contains account names and executable paths; treat it as sensitive server metadata and use --redact before sharing it"
+  elif [[ -L $CSV ]]; then echo "Refusing to write the CSV to a symlink: $CSV" >&2
+  elif [[ -e $CSV && ! -f $CSV ]]; then echo "Refusing to write the CSV to a non-regular file: $CSV" >&2
+  elif ( umask 077; csv_out > "$CSV" ); then st INFO "CSV written to $CSV (owner-only) — it contains account names and executable paths; treat it as sensitive server metadata and use --redact before sharing it"
   else echo "Could not write $CSV" >&2; fi
 fi
 
@@ -520,12 +571,13 @@ Remediation is handler-specific — match it to the row's HANDLER:
         every site on that handler; use a maintenance window). The command differs by
         handler, so match it to yours:
             Apache / mod_lsapi:  systemctl restart httpd   # recycles its lsphp workers
-            LiteSpeed:           a plain "systemctl restart lsws" may NOT recycle lsphp
+            LiteSpeed:           a web-server restart ("systemctl restart lsws" or
+                                 "lswsctrl restart") does NOT reliably recycle lsphp
                                  run in detached/external mode (the usual LiteSpeed
-                                 setup). Use LiteSpeed's own PHP restart instead
-                                 (WebAdmin console > Actions > Restart PHP, or
-                                     /usr/local/lsws/bin/lswsctrl restart
-                                 ), or recycle the single confirmed PID as above.
+                                 setup) -- detached lsphp can survive it. Use
+                                 LiteSpeed's own PHP restart instead: WebAdmin console
+                                 > Actions > Restart PHP, or recycle the single
+                                 confirmed PID as above.
         An independently managed PHP-FPM service is restarted separately (see MASTER above):
             systemctl restart ea-phpNN-php-fpm
 
@@ -543,12 +595,12 @@ if [[ $MODE == plan ]]; then
     [[ -n $cp ]] && echo "Confirmed-stale leaf worker PID(s) (--repair --pid N prints the exact command for one): $cp"
     [[ -n $mp ]] && echo "Unverified mismatch PID(s) (confirm the served version first; not eligible for --repair): $mp"
     remediation_text
-  elif (( unknown > 0 )); then
-    st INFO "nothing confirmed to recycle, but the scan is INCOMPLETE ($unknown worker(s) unreadable) — re-run as root before concluding"
+  elif (( unknown > 0 || uncertain > 0 )); then
+    st INFO "nothing confirmed to recycle, but the scan is INCOMPLETE ($unknown unreadable, $uncertain unverified-parent) — investigate the process tree / re-run as root before concluding"
   else
     st OK "nothing to recycle"
   fi
-  (( fail > 0 || master_stale > 0 )) && exit 2; (( warn > 0 )) && exit 1; (( unknown > 0 )) && exit 3; exit 0
+  (( fail > 0 || master_stale > 0 )) && exit 2; (( warn > 0 )) && exit 1; (( unknown > 0 || uncertain > 0 )) && exit 3; exit 0
 fi
 
 if [[ $MODE == repair ]]; then
@@ -585,5 +637,5 @@ fi
 # ---- default audit exit codes ----------------------------------------------
 (( fail > 0 || master_stale > 0 )) && exit 2
 (( warn > 0 )) && exit 1
-(( unknown > 0 )) && exit 3
+(( unknown > 0 || uncertain > 0 )) && exit 3
 exit 0
