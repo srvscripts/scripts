@@ -1,7 +1,7 @@
 {
     "source": "https://srvscripts.com/scripts/",
     "license": "MIT",
-    "generated": "2026-11-26T22:46:06+00:00",
+    "generated": "2026-11-26T22:54:42+00:00",
     "scripts": [
         {
             "slug": "web-log-top-ips",
@@ -72,7 +72,7 @@
             "page": "https://srvscripts.com/scripts/asterisk-recordings-to-mp3/",
             "language": "Bash",
             "version": "1.2.2",
-            "updated": "2026-10-09",
+            "updated": "2026-11-26",
             "summary": "Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, \u00b5-law, SLN) to small mono MP3 files from cron, verifies each file and keeps the FreePBX call log player working."
         },
         {
@@ -168,7 +168,7 @@
             "page": "https://srvscripts.com/scripts/cpanel-php-stale-worker-check/",
             "language": "Bash",
             "version": "1.1.1",
-            "updated": "2026-10-29",
+            "updated": "2026-11-26",
             "summary": "Read-only script that finds lsphp / php-fpm workers still running a replaced PHP binary after an update \u2014 the reason a cPanel site keeps reporting the old version."
         },
         {
@@ -480,7 +480,7 @@
             "page": "https://srvscripts.com/scripts/secure-boot-cert-check/",
             "language": "PowerShell",
             "version": "1.0.0",
-            "updated": "2026-10-09",
+            "updated": "2026-11-26",
             "summary": "Free read-only PowerShell script that checks Secure Boot, the 2023 Microsoft certificates in DB and KEK, UEFICA2023Status and events 1801/1808 on many Windows computers."
         },
         {

@@ -4,7 +4,7 @@ Converts Asterisk, FreePBX and Issabel call recordings (WAV, WAV49, GSM, µ-law,
 
 **Full documentation, example output and troubleshooting:** <https://srvscripts.com/scripts/asterisk-recordings-to-mp3/>
 
-Version 1.2.2 · updated 2026-10-10 · Lab-tested
+Version 1.2.2 · updated 2026-11-27 · Lab-tested
 
 ## Download, verify and run
 

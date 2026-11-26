@@ -4,7 +4,9 @@ The latest release of every script, most recently updated first. Each script fol
 
 | Updated | Script | Version | What changed |
 |---|---|---|---|
-| 2026-10-29 | [cPanel PHP Stale-Worker Check](cpanel-php-stale-worker-check/CHANGELOG.md) | 1.1.1 | Audit hardening from an independent review (behaviour of the default stale-worker scan is unchanged). Package diagnostics: the dnf update query runs with DNF_DI |
+| 2026-11-26 | [cPanel PHP Stale-Worker Check](cpanel-php-stale-worker-check/CHANGELOG.md) | 1.1.1 | Audit hardening from an independent review (behaviour of the default stale-worker scan is unchanged). Package diagnostics: the dnf update query runs with DNF_DI |
+| 2026-11-26 | [Secure Boot 2023 Certificate Check: PowerShell Script for Many PCs](secure-boot-cert-check/CHANGELOG.md) | 1.0.0 | First release. |
+| 2026-11-26 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](asterisk-recordings-to-mp3/CHANGELOG.md) | 1.2.2 | If a folder, or a link to a folder, appeared at the MP3's name while a recording was being converted, 1.2.1 put the MP3 inside that folder and reported success, |
 | 2026-10-19 | [Backup Verify Script](backup-verify/CHANGELOG.md) | 2.1.2 | Header comment now shows the real version (it still said 2.1.0); no change to checks or output. |
 | 2026-10-18 | [VoIP Toll Fraud Watch: Alert on International and After-Hours Calls in Asterisk](voip-toll-fraud-watch/CHANGELOG.md) | 1.0.1 | On FreePBX, or with --source db, an unreadable CDR database is UNKNOWN (exit 3) instead of a fallback to Master.csv. Skipped transit check shown. Alerts retried |
 | 2026-10-18 | [SSL Expiry Check Script: Free Network Test for Web and Mail](ssl-expiry-check/CHANGELOG.md) | 1.1.0 | Also verifies the certificate chain and host name: self-signed, untrusted, incomplete-chain and wrong-host certificates are now reported as BAD (previously only |
@@ -22,7 +24,6 @@ The latest release of every script, most recently updated first. Each script fol
 | 2026-10-09 | [cPanel Disk Usage Report](cpanel-disk-usage-report/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [cPanel Account Inventory](cpanel-account-inventory/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [WordPress Version Audit: Find Every WordPress Site and Its Version](wordpress-version-audit/CHANGELOG.md) | 1.1.0 | Status words now say what is checked: MINIMUM-MET / BELOW-MINIMUM (against 7.0.3 for CVE-2026-64638 by default) instead of OK / OUTDATED; the threshold and advi |
-| 2026-10-09 | [Secure Boot 2023 Certificate Check: PowerShell Script for Many PCs](secure-boot-cert-check/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [PHP-FPM Slow Log Analyzer](php-fpm-slowlog-analyzer/CHANGELOG.md) | 1.0.0 | Initial release |
 | 2026-10-09 | [NTFS Permissions Report to CSV: PowerShell Folder ACL Script](ntfs-permissions-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [MySQL Health Snapshot Script: Free 10-Second MariaDB Check](mysql-health-snapshot/CHANGELOG.md) | 1.0.0 | Initial release |
@@ -40,7 +41,6 @@ The latest release of every script, most recently updated first. Each script fol
 | 2026-10-09 | [Entra ID Inactive Users Report: signInActivity PowerShell Script](entra-inactive-users-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [Block RDP Brute Force on Windows Server: PowerShell Script](rdp-brute-force-blocker/CHANGELOG.md) | 1.0.1 | WhatIf the change log now says "Would block" and nothing is written to the log file. Tested on a Windows Server 2025 DC. |
 | 2026-10-09 | [AutoSSL DCV Failures Report](autossl-failure-report/CHANGELOG.md) | 1.0.0 | Initial release |
-| 2026-10-09 | [Asterisk Recordings to MP3: Bulk Convert FreePBX Call Recordings](asterisk-recordings-to-mp3/CHANGELOG.md) | 1.2.2 | If a folder, or a link to a folder, appeared at the MP3's name while a recording was being converted, 1.2.1 put the MP3 inside that folder and reported success, |
 | 2026-10-09 | [AD Privileged Group Report: Domain Admins and adminCount Audit](ad-privileged-group-report/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [AD Nested Group Membership: PowerShell Tree with Loop Detection](ad-nested-group-membership/CHANGELOG.md) | 1.0.0 | First release. |
 | 2026-10-09 | [AD Health Check Report: dcdiag and repadmin PowerShell Script](ad-health-check-report/CHANGELOG.md) | 1.0.0 | First release. |
